@@ -81,6 +81,8 @@ class CCD_Dashboard_Page {
 		<input type="hidden" name="action" value="ccd_recreate_dashboard_page">
 		<?php wp_nonce_field( 'ccd_recreate_dashboard_page', 'ccd_dashboard_page_nonce' ); ?>
 		<?php submit_button( __( 'Create/Recreate Dashboard Page', 'client-content-dashboard' ), 'secondary' ); ?>
-		</form><?php
+		</form>
+		<?php CCD_Updater::render_tools_section(); ?>
+		<?php
 	}
 }
