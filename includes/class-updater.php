@@ -3,11 +3,15 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 /** Lightweight GitHub releases/tags updater using WordPress's native update UI. */
 class CCD_Updater {
+	/** Built-in repository used out of the box when no optional override is set. */
+	const DEFAULT_REPOSITORY = 'https://github.com/pooya13vm/client-content-dashboard';
+
 	private static $plugin_file;
 	private static $repository;
 	private static $slug;
 
-	public static function init( $plugin_file, $repository ) {
+	public static function init( $plugin_file ) {
+		$repository = self::repository_url();
 		if ( ! $repository || false === filter_var( $repository, FILTER_VALIDATE_URL ) ) { return; }
 		self::$plugin_file = $plugin_file;
 		self::$repository = untrailingslashit( $repository );
@@ -15,6 +19,14 @@ class CCD_Updater {
 		add_filter( 'pre_set_site_transient_update_plugins', array( __CLASS__, 'check' ) );
 		add_filter( 'plugins_api', array( __CLASS__, 'info' ), 20, 3 );
 		add_filter( 'upgrader_source_selection', array( __CLASS__, 'normalize_folder' ), 10, 4 );
+	}
+
+	private static function repository_url() {
+		// CCD_GITHUB_REPOSITORY is optional and overrides the built-in repository.
+		$repository = defined( 'CCD_GITHUB_REPOSITORY' ) ? CCD_GITHUB_REPOSITORY : self::DEFAULT_REPOSITORY;
+
+		// Developers may optionally override the resolved URL without editing plugin files.
+		return apply_filters( 'ccd_github_repository_url', $repository );
 	}
 
 	private static function release() {

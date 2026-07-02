@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Client Content Dashboard
  * Description: A simplified frontend dashboard for clients to create and manage structured content.
- * Version: 1.0.1
+ * Version: 0.1.1
  * Author: Client Content Dashboard
  * Text Domain: client-content-dashboard
  * Requires at least: 6.2
@@ -19,11 +19,6 @@ define( 'CCD_FILE', __FILE__ );
 define( 'CCD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CCD_URL', plugin_dir_url( __FILE__ ) );
 
-// Set this to the public GitHub repository URL, e.g. https://github.com/owner/repository.
-if ( ! defined( 'CCD_GITHUB_REPOSITORY' ) ) {
-	define( 'CCD_GITHUB_REPOSITORY', '' );
-}
-
 require_once CCD_DIR . 'includes/class-activator.php';
 require_once CCD_DIR . 'includes/class-templates.php';
 require_once CCD_DIR . 'includes/class-admin.php';
@@ -38,6 +33,6 @@ function ccd_boot_plugin() {
 	CCD_Admin::init();
 	CCD_Client_Users::init();
 	CCD_Dashboard::init();
-	CCD_Updater::init( CCD_FILE, CCD_GITHUB_REPOSITORY );
+	CCD_Updater::init( CCD_FILE );
 }
 add_action( 'plugins_loaded', 'ccd_boot_plugin' );
