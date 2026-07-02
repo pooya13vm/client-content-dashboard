@@ -3,6 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class CCD_Dashboard {
 	private static $login_error = '';
+	private static $editor_instance = 0;
 
 	public static function init() {
 		add_shortcode( 'client_content_dashboard', array( __CLASS__, 'shortcode' ) );
@@ -15,9 +16,18 @@ class CCD_Dashboard {
 		wp_enqueue_style( 'ccd-dashboard', CCD_URL . 'assets/css/dashboard.css', array(), CCD_VERSION );
 		wp_enqueue_script( 'ccd-dashboard', CCD_URL . 'assets/js/dashboard.js', array(), CCD_VERSION, true );
 		if ( self::can_access() ) {
+			add_filter( 'wp_default_editor', array( __CLASS__, 'default_editor' ) );
 			wp_enqueue_editor();
 			if ( current_user_can( 'upload_files' ) ) { wp_enqueue_media(); }
 		}
+	}
+
+	public static function default_editor() {
+		return 'tinymce';
+	}
+
+	private static function is_client_editor() {
+		return in_array( 'client_editor', (array) wp_get_current_user()->roles, true );
 	}
 
 	public static function handle_submission() {
@@ -186,11 +196,19 @@ class CCD_Dashboard {
 		$templates = CCD_Templates::all();
 		$selected = $post_id ? get_post_meta( $post_id, '_ccd_content_template', true ) : array_key_first( $templates );
 		$post = $post_id ? get_post( $post_id ) : null;
+		$shared_fields = array();
+		if ( isset( $templates[ $selected ]['fields'] ) ) {
+			foreach ( $templates[ $selected ]['fields'] as $field ) {
+				if ( in_array( $field['map'], array( 'post_title', 'post_content' ), true ) ) { $shared_fields[ $field['map'] ] = $field; }
+			}
+		}
 		?><form class="ccd-form" method="post" enctype="multipart/form-data">
 		<?php wp_nonce_field( 'ccd_save_content', 'ccd_nonce' ); ?><input type="hidden" name="ccd_action" value="save_content"><input type="hidden" name="ccd_post_id" value="<?php echo esc_attr( $post_id ); ?>">
 		<label><?php esc_html_e( 'Content Template', 'client-content-dashboard' ); ?><select name="ccd_template" id="ccd-template" <?php disabled( (bool) $post_id ); ?>><?php foreach ( $templates as $key => $template ) : ?><option value="<?php echo esc_attr( $key ); ?>" <?php selected( $selected, $key ); ?>><?php echo esc_html( $template['label'] ); ?></option><?php endforeach; ?></select></label>
 		<?php if ( $post_id ) : ?><input type="hidden" name="ccd_template" value="<?php echo esc_attr( $selected ); ?>"><?php endif; ?>
-		<?php foreach ( $templates as $key => $template ) : ?><div class="ccd-template-fields" data-template="<?php echo esc_attr( $key ); ?>"<?php echo $selected !== $key ? ' hidden' : ''; ?>><?php foreach ( $template['fields'] as $field ) { self::render_field( $field, $post, $key ); } ?></div><?php endforeach; ?>
+		<?php if ( isset( $shared_fields['post_title'] ) ) { self::render_field( $shared_fields['post_title'], $post, 'shared' ); } ?>
+		<?php if ( isset( $shared_fields['post_content'] ) ) { self::render_field( $shared_fields['post_content'], $post, 'shared' ); } ?>
+		<?php foreach ( $templates as $key => $template ) : ?><div class="ccd-template-fields" data-template="<?php echo esc_attr( $key ); ?>"<?php echo $selected !== $key ? ' hidden' : ''; ?>><?php foreach ( $template['fields'] as $field ) { if ( ! in_array( $field['map'], array( 'post_title', 'post_content' ), true ) ) { self::render_field( $field, $post, $key ); } } ?></div><?php endforeach; ?>
 		<button type="submit"><?php esc_html_e( 'Save Content', 'client-content-dashboard' ); ?></button></form><?php
 	}
 
@@ -201,8 +219,9 @@ class CCD_Dashboard {
 		elseif ( $post && 'meta' === $field['map'] && 'gallery' !== $field['type'] ) { $value = get_post_meta( $post->ID, $field['meta_key'], true ); }
 		$required = ! empty( $field['required'] ) ? ' required' : '';
 		if ( 'post_content' === $field['map'] || 'rich_text' === $field['type'] ) {
-			$editor_id = 'ccd_editor_' . sanitize_key( $template_key ) . '_' . sanitize_key( $field['key'] );
-			?><div class="ccd-field ccd-rich-text-field"><label for="<?php echo esc_attr( $editor_id ); ?>"><?php echo esc_html( $field['label'] ); ?></label><?php
+			self::$editor_instance++;
+			$editor_id = 'ccd_editor_' . sanitize_key( $template_key ) . '_' . sanitize_key( $field['key'] ) . '_' . self::$editor_instance;
+			?><div class="ccd-field ccd-rich-text-field ccd-rich-editor"><label for="<?php echo esc_attr( $editor_id ); ?>"><?php echo esc_html( $field['label'] ); ?></label><?php
 			wp_editor(
 				$value,
 				$editor_id,
@@ -210,10 +229,10 @@ class CCD_Dashboard {
 					'textarea_name' => $field['key'],
 					'media_buttons' => current_user_can( 'upload_files' ),
 					'teeny'         => false,
-					'quicktags'     => true,
-					'editor_height' => 360,
+					'quicktags'     => ! self::is_client_editor(),
+					'editor_height' => 380,
 					'tinymce'       => array(
-						'toolbar1' => 'formatselect,bold,italic,bullist,numlist,blockquote,link,unlink,undo,redo',
+						'toolbar1' => 'formatselect,bold,italic,bullist,numlist,blockquote,alignleft,aligncenter,alignright,link,unlink,undo,redo,removeformat',
 						'toolbar2' => '',
 					),
 				)
