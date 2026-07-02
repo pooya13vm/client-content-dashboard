@@ -64,7 +64,9 @@ class CCD_Admin {
 	}
 
 	public static function redirect_clients() {
-		if ( ! is_user_logged_in() || ! self::is_client() || wp_doing_ajax() || defined( 'DOING_CRON' ) ) { return; }
+		global $pagenow;
+		$allowed_endpoints = array( 'admin-ajax.php', 'async-upload.php', 'media-upload.php' );
+		if ( ! is_user_logged_in() || ! self::is_client() || wp_doing_ajax() || defined( 'DOING_CRON' ) || in_array( $pagenow, $allowed_endpoints, true ) ) { return; }
 		$s = get_option( 'ccd_settings', array() );
 		if ( empty( $s['hide_wp_admin'] ) ) { return; }
 		$page_id = empty( $s['dashboard_page_id'] ) ? 0 : absint( $s['dashboard_page_id'] );

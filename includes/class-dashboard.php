@@ -39,6 +39,10 @@ class CCD_Dashboard {
 			self::handle_login();
 			return;
 		}
+		if ( ! empty( $_POST['ccd_action'] ) && 'publish_content' === $_POST['ccd_action'] ) {
+			self::handle_quick_publish();
+			return;
+		}
 		if ( empty( $_POST['ccd_action'] ) || 'save_content' !== $_POST['ccd_action'] ) { return; }
 		if ( ! self::can_access() ) { wp_die( esc_html__( 'You are not allowed to create content.', 'client-content-dashboard' ), '', array( 'response' => 403 ) ); }
 		if ( empty( $_POST['ccd_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['ccd_nonce'] ) ), 'ccd_save_content' ) ) { wp_die( esc_html__( 'Security check failed.', 'client-content-dashboard' ), 403 ); }
@@ -61,8 +65,17 @@ class CCD_Dashboard {
 		if ( empty( $data['post_title'] ) || empty( $data['post_content'] ) ) { wp_die( esc_html__( 'Title and content are required.', 'client-content-dashboard' ), 400 ); }
 
 		$settings = get_option( 'ccd_settings', array() );
-		// The configured status applies to new submissions; edits retain their workflow state.
-		$data['post_status'] = $post_id ? get_post_status( $post_id ) : ( isset( $settings['default_post_status'] ) && 'pending' === $settings['default_post_status'] ? 'pending' : 'draft' );
+		$original_status = $post_id ? get_post_status( $post_id ) : '';
+		$intent = isset( $_POST['ccd_save_intent'] ) ? sanitize_key( wp_unslash( $_POST['ccd_save_intent'] ) ) : '';
+		if ( 'draft' === $intent ) {
+			$data['post_status'] = 'draft';
+		} elseif ( 'publish' === $intent ) {
+			if ( ! self::can_publish() ) { wp_die( esc_html__( 'You are not allowed to publish content.', 'client-content-dashboard' ), '', array( 'response' => 403 ) ); }
+			$data['post_status'] = 'publish';
+		} else {
+			// Preserve legacy/default behavior when a submission has no explicit action.
+			$data['post_status'] = $post_id ? $original_status : ( isset( $settings['default_post_status'] ) && 'pending' === $settings['default_post_status'] ? 'pending' : 'draft' );
+		}
 		$result = $post_id ? wp_update_post( array_merge( $data, array( 'ID' => $post_id ) ), true ) : wp_insert_post( $data, true );
 		if ( is_wp_error( $result ) ) { wp_die( esc_html( $result->get_error_message() ) ); }
 		$post_id = (int) $result;
@@ -71,8 +84,23 @@ class CCD_Dashboard {
 		foreach ( $template['fields'] as $field ) {
 			self::save_field( $post_id, $field, $settings );
 		}
+		$message = 'draft' === $data['post_status'] ? 'draft' : ( 'publish' === $data['post_status'] ? ( 'publish' === $original_status ? 'updated' : 'published' ) : 'updated' );
 		$url = remove_query_arg( array( 'ccd_edit' ) );
-		wp_safe_redirect( add_query_arg( 'ccd_saved', '1', $url ) );
+		wp_safe_redirect( add_query_arg( 'ccd_saved', $message, $url ) );
+		exit;
+	}
+
+	private static function handle_quick_publish() {
+		$post_id = isset( $_POST['ccd_post_id'] ) ? absint( $_POST['ccd_post_id'] ) : 0;
+		if ( ! self::can_publish() || ! $post_id || ! self::can_edit( $post_id ) || 'draft' !== get_post_status( $post_id ) ) {
+			wp_die( esc_html__( 'You are not allowed to publish this article.', 'client-content-dashboard' ), '', array( 'response' => 403 ) );
+		}
+		if ( empty( $_POST['ccd_publish_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['ccd_publish_nonce'] ) ), 'ccd_publish_post_' . $post_id ) ) {
+			wp_die( esc_html__( 'Security check failed.', 'client-content-dashboard' ), '', array( 'response' => 403 ) );
+		}
+		$result = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'publish' ), true );
+		if ( is_wp_error( $result ) ) { wp_die( esc_html( $result->get_error_message() ) ); }
+		wp_safe_redirect( add_query_arg( array( 'ccd_view' => 'articles', 'ccd_saved' => 'published' ), get_permalink( get_queried_object_id() ) ) );
 		exit;
 	}
 
@@ -164,6 +192,10 @@ class CCD_Dashboard {
 		return $post && (int) $post->post_author === get_current_user_id() && current_user_can( 'edit_post', $post_id );
 	}
 
+	private static function can_publish() {
+		return self::can_access() && current_user_can( 'publish_posts' );
+	}
+
 	public static function shortcode() {
 		if ( ! is_user_logged_in() ) { return self::render_login_form(); }
 		if ( ! self::can_access() ) { return '<p class="ccd-permission-error">' . esc_html__( 'You do not have permission to access this dashboard.', 'client-content-dashboard' ) . '</p>'; }
@@ -176,7 +208,7 @@ class CCD_Dashboard {
 		?><div class="ccd-dashboard"><div class="ccd-app-shell">
 		<?php self::render_sidebar( $view ); ?>
 		<main class="ccd-app-main">
-		<?php if ( isset( $_GET['ccd_saved'] ) ) : ?><div class="ccd-notice"><?php esc_html_e( 'Content saved.', 'client-content-dashboard' ); ?></div><?php endif; ?>
+		<?php if ( isset( $_GET['ccd_saved'] ) ) : $saved = sanitize_key( wp_unslash( $_GET['ccd_saved'] ) ); $messages = array( 'draft' => __( 'Draft saved.', 'client-content-dashboard' ), 'published' => __( 'Article published.', 'client-content-dashboard' ), 'updated' => __( 'Article updated.', 'client-content-dashboard' ) ); ?><div class="ccd-notice"><?php echo esc_html( isset( $messages[ $saved ] ) ? $messages[ $saved ] : __( 'Content saved.', 'client-content-dashboard' ) ); ?></div><?php endif; ?>
 		<?php self::render_view( $view, $edit_id ); ?>
 		</main></div></div><?php
 		return ob_get_clean();
@@ -294,7 +326,7 @@ class CCD_Dashboard {
 		<?php if ( isset( $shared_fields['post_title'] ) ) { self::render_field( $shared_fields['post_title'], $post, 'shared' ); } ?>
 		<?php if ( isset( $shared_fields['post_content'] ) ) { self::render_field( $shared_fields['post_content'], $post, 'shared' ); } ?>
 		<?php foreach ( $templates as $key => $template ) : ?><div class="ccd-template-fields" data-template="<?php echo esc_attr( $key ); ?>"<?php echo $selected !== $key ? ' hidden' : ''; ?>><?php foreach ( $template['fields'] as $field ) { if ( ! in_array( $field['map'], array( 'post_title', 'post_content' ), true ) ) { self::render_field( $field, $post, $key ); } } ?></div><?php endforeach; ?>
-		<button class="ccd-submit" type="submit"><?php esc_html_e( 'Save Content', 'client-content-dashboard' ); ?></button></form><?php
+		<div class="ccd-form-actions"><button class="ccd-secondary-action" type="submit" name="ccd_save_intent" value="draft"><?php esc_html_e( 'Save Draft', 'client-content-dashboard' ); ?></button><?php if ( self::can_publish() ) : ?><button class="ccd-submit" type="submit" name="ccd_save_intent" value="publish"><?php echo 'publish' === ( $post ? $post->post_status : '' ) ? esc_html__( 'Update Published Article', 'client-content-dashboard' ) : esc_html__( 'Publish', 'client-content-dashboard' ); ?></button><?php endif; ?></div></form><?php
 	}
 
 	private static function render_field( $field, $post, $template_key ) {
@@ -343,7 +375,11 @@ class CCD_Dashboard {
 			$template = isset( $templates[ $template_key ] ) ? $templates[ $template_key ]['label'] : $template_key;
 			$edit_url = self::view_url( 'add', array( 'ccd_edit' => $post->ID ) );
 			$preview_url = 'publish' === $post->post_status ? get_permalink( $post ) : get_preview_post_link( $post );
-			echo '<div class="ccd-list-row"><strong data-label="' . esc_attr__( 'Title', 'client-content-dashboard' ) . '">' . esc_html( get_the_title( $post ) ? get_the_title( $post ) : __( '(Untitled)', 'client-content-dashboard' ) ) . '</strong><span class="ccd-status" data-label="' . esc_attr__( 'Status', 'client-content-dashboard' ) . '">' . esc_html( $status ? $status->label : $post->post_status ) . '</span><span data-label="' . esc_attr__( 'Modified', 'client-content-dashboard' ) . '">' . esc_html( get_the_modified_date( '', $post ) ) . '</span><span data-label="' . esc_attr__( 'Template', 'client-content-dashboard' ) . '">' . esc_html( $template ) . '</span><span class="ccd-row-actions" data-label="' . esc_attr__( 'Actions', 'client-content-dashboard' ) . '"><a href="' . esc_url( $edit_url ) . '">' . esc_html__( 'Edit', 'client-content-dashboard' ) . '</a>' . ( $preview_url ? '<a href="' . esc_url( $preview_url ) . '" target="_blank" rel="noopener noreferrer">' . ( 'publish' === $post->post_status ? esc_html__( 'View', 'client-content-dashboard' ) : esc_html__( 'Preview', 'client-content-dashboard' ) ) . '</a>' : '' ) . '</span></div>';
+			echo '<div class="ccd-list-row"><strong data-label="' . esc_attr__( 'Title', 'client-content-dashboard' ) . '">' . esc_html( get_the_title( $post ) ? get_the_title( $post ) : __( '(Untitled)', 'client-content-dashboard' ) ) . '</strong><span class="ccd-status" data-label="' . esc_attr__( 'Status', 'client-content-dashboard' ) . '">' . esc_html( $status ? $status->label : $post->post_status ) . '</span><span data-label="' . esc_attr__( 'Modified', 'client-content-dashboard' ) . '">' . esc_html( get_the_modified_date( '', $post ) ) . '</span><span data-label="' . esc_attr__( 'Template', 'client-content-dashboard' ) . '">' . esc_html( $template ) . '</span><div class="ccd-row-actions" data-label="' . esc_attr__( 'Actions', 'client-content-dashboard' ) . '"><a href="' . esc_url( $edit_url ) . '">' . esc_html__( 'Edit', 'client-content-dashboard' ) . '</a>' . ( $preview_url ? '<a href="' . esc_url( $preview_url ) . '" target="_blank" rel="noopener noreferrer">' . ( 'publish' === $post->post_status ? esc_html__( 'View', 'client-content-dashboard' ) : esc_html__( 'Preview', 'client-content-dashboard' ) ) . '</a>' : '' );
+			if ( 'draft' === $post->post_status && self::can_publish() ) {
+				echo '<form method="post" action=""><input type="hidden" name="ccd_action" value="publish_content"><input type="hidden" name="ccd_post_id" value="' . esc_attr( $post->ID ) . '">' . wp_nonce_field( 'ccd_publish_post_' . $post->ID, 'ccd_publish_nonce', true, false ) . '<button type="submit">' . esc_html__( 'Publish', 'client-content-dashboard' ) . '</button></form>';
+			}
+			echo '</div></div>';
 		}
 		echo '</div>';
 	}
