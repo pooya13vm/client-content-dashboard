@@ -2,7 +2,7 @@
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class CCD_Dashboard {
-	private static $messages = array();
+	private static $login_error = '';
 
 	public static function init() {
 		add_shortcode( 'client_content_dashboard', array( __CLASS__, 'shortcode' ) );
@@ -17,8 +17,12 @@ class CCD_Dashboard {
 	}
 
 	public static function handle_submission() {
+		if ( ! empty( $_POST['ccd_action'] ) && 'login' === $_POST['ccd_action'] ) {
+			self::handle_login();
+			return;
+		}
 		if ( empty( $_POST['ccd_action'] ) || 'save_content' !== $_POST['ccd_action'] ) { return; }
-		if ( ! is_user_logged_in() || ! current_user_can( 'edit_posts' ) ) { wp_die( esc_html__( 'You are not allowed to create content.', 'client-content-dashboard' ), 403 ); }
+		if ( ! self::can_access() ) { wp_die( esc_html__( 'You are not allowed to create content.', 'client-content-dashboard' ), '', array( 'response' => 403 ) ); }
 		if ( empty( $_POST['ccd_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['ccd_nonce'] ) ), 'ccd_save_content' ) ) { wp_die( esc_html__( 'Security check failed.', 'client-content-dashboard' ), 403 ); }
 
 		$template_key = isset( $_POST['ccd_template'] ) ? sanitize_key( $_POST['ccd_template'] ) : '';
@@ -52,6 +56,50 @@ class CCD_Dashboard {
 		$url = remove_query_arg( array( 'ccd_edit' ) );
 		wp_safe_redirect( add_query_arg( 'ccd_saved', '1', $url ) );
 		exit;
+	}
+
+	private static function handle_login() {
+		if ( is_user_logged_in() ) { return; }
+		if ( empty( $_POST['ccd_login_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['ccd_login_nonce'] ) ), 'ccd_frontend_login' ) ) {
+			self::$login_error = __( 'Security check failed. Please refresh the page and try again.', 'client-content-dashboard' );
+			return;
+		}
+
+		$login = isset( $_POST['ccd_login'] ) ? sanitize_user( wp_unslash( $_POST['ccd_login'] ), false ) : '';
+		$password = isset( $_POST['ccd_password'] ) ? (string) wp_unslash( $_POST['ccd_password'] ) : '';
+		if ( '' === $login || '' === $password ) {
+			self::$login_error = __( 'Enter your username or email and password.', 'client-content-dashboard' );
+			return;
+		}
+
+		$user = wp_signon(
+			array(
+				'user_login'    => $login,
+				'user_password' => $password,
+				'remember'      => ! empty( $_POST['ccd_remember'] ),
+			),
+			is_ssl()
+		);
+		if ( is_wp_error( $user ) ) {
+			self::$login_error = __( 'The username/email or password is incorrect.', 'client-content-dashboard' );
+			return;
+		}
+
+		wp_set_current_user( $user->ID );
+		wp_safe_redirect( self::current_dashboard_url() );
+		exit;
+	}
+
+	private static function current_dashboard_url() {
+		$page_id = get_queried_object_id();
+		return $page_id ? get_permalink( $page_id ) : home_url( '/' );
+	}
+
+	private static function can_access() {
+		if ( ! is_user_logged_in() ) { return false; }
+		$user = wp_get_current_user();
+		$allowed_role = array_intersect( array( 'client_editor', 'administrator' ), (array) $user->roles );
+		return ! empty( $allowed_role ) || current_user_can( 'edit_posts' );
 	}
 
 	private static function save_field( $post_id, $field, $settings ) {
@@ -99,8 +147,8 @@ class CCD_Dashboard {
 	}
 
 	public static function shortcode() {
-		if ( ! is_user_logged_in() ) { return '<p>' . esc_html__( 'Please log in to access the dashboard.', 'client-content-dashboard' ) . '</p>'; }
-		if ( ! current_user_can( 'edit_posts' ) ) { return '<p>' . esc_html__( 'You do not have permission to manage content.', 'client-content-dashboard' ) . '</p>'; }
+		if ( ! is_user_logged_in() ) { return self::render_login_form(); }
+		if ( ! self::can_access() ) { return '<p class="ccd-permission-error">' . esc_html__( 'You do not have permission to access this dashboard.', 'client-content-dashboard' ) . '</p>'; }
 		$edit_id = isset( $_GET['ccd_edit'] ) ? absint( $_GET['ccd_edit'] ) : 0;
 		if ( $edit_id && ! self::can_edit( $edit_id ) ) { $edit_id = 0; }
 		ob_start();
@@ -110,6 +158,23 @@ class CCD_Dashboard {
 		<?php self::render_form( $edit_id ); ?>
 		<h2><?php esc_html_e( 'My Content', 'client-content-dashboard' ); ?></h2><?php self::render_list(); ?>
 		</div><?php
+		return ob_get_clean();
+	}
+
+	private static function render_login_form() {
+		$login = isset( $_POST['ccd_login'] ) && isset( $_POST['ccd_action'] ) && 'login' === $_POST['ccd_action'] ? sanitize_user( wp_unslash( $_POST['ccd_login'] ), false ) : '';
+		ob_start();
+		?><div class="ccd-login-box">
+		<h2><?php esc_html_e( 'Client Portal Login', 'client-content-dashboard' ); ?></h2>
+		<div class="ccd-login-error" role="alert" aria-live="polite"><?php if ( self::$login_error ) { echo esc_html( self::$login_error ); } ?></div>
+		<form class="ccd-login-form" method="post" action="">
+			<?php wp_nonce_field( 'ccd_frontend_login', 'ccd_login_nonce' ); ?>
+			<input type="hidden" name="ccd_action" value="login">
+			<label><?php esc_html_e( 'Username or email', 'client-content-dashboard' ); ?><input type="text" name="ccd_login" value="<?php echo esc_attr( $login ); ?>" autocomplete="username" required></label>
+			<label><?php esc_html_e( 'Password', 'client-content-dashboard' ); ?><input type="password" name="ccd_password" autocomplete="current-password" required></label>
+			<label class="ccd-remember"><input type="checkbox" name="ccd_remember" value="1"> <?php esc_html_e( 'Remember me', 'client-content-dashboard' ); ?></label>
+			<button type="submit"><?php esc_html_e( 'Log In', 'client-content-dashboard' ); ?></button>
+		</form></div><?php
 		return ob_get_clean();
 	}
 

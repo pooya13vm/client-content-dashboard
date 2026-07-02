@@ -39,7 +39,9 @@ class CCD_Admin {
 		<tr><th><?php esc_html_e( 'Hide wp-admin', 'client-content-dashboard' ); ?></th><td><label><input type="checkbox" name="ccd_settings[hide_wp_admin]" value="1" <?php checked( $s['hide_wp_admin'], 1 ); ?>> <?php esc_html_e( 'Redirect Client Editors to the frontend dashboard', 'client-content-dashboard' ); ?></label></td></tr>
 		<tr><th><?php esc_html_e( 'Maximum Upload Size', 'client-content-dashboard' ); ?></th><td><input type="number" min="1" max="100" name="ccd_settings[max_upload_mb]" value="<?php echo esc_attr( $s['max_upload_mb'] ); ?>"> MB</td></tr>
 		<tr><th><?php esc_html_e( 'Maximum Gallery Images', 'client-content-dashboard' ); ?></th><td><input type="number" min="1" max="50" name="ccd_settings[max_gallery_images]" value="<?php echo esc_attr( $s['max_gallery_images'] ); ?>"></td></tr>
-		</table><?php submit_button(); ?></form></div><?php
+		</table><?php submit_button(); ?></form>
+		<?php CCD_Client_Users::render(); ?>
+		</div><?php
 	}
 
 	private static function is_client() {
