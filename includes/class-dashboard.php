@@ -9,6 +9,14 @@ class CCD_Dashboard {
 		add_shortcode( 'client_content_dashboard', array( __CLASS__, 'shortcode' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'handle_submission' ) );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ) );
+		add_filter( 'body_class', array( __CLASS__, 'body_classes' ) );
+	}
+
+	public static function body_classes( $classes ) {
+		if ( is_singular() && has_shortcode( (string) get_post_field( 'post_content', get_queried_object_id() ), 'client_content_dashboard' ) ) {
+			$classes[] = 'ccd-dashboard-page';
+		}
+		return $classes;
 	}
 
 	public static function assets() {
@@ -167,10 +175,13 @@ class CCD_Dashboard {
 		if ( $edit_id && ! self::can_edit( $edit_id ) ) { $edit_id = 0; }
 		ob_start();
 		?><div class="ccd-dashboard">
+		<header class="ccd-dashboard-header">
+			<h1><?php esc_html_e( 'Content Dashboard', 'client-content-dashboard' ); ?></h1>
+			<p><?php esc_html_e( 'Create and manage content for your website.', 'client-content-dashboard' ); ?></p>
+		</header>
 		<?php if ( isset( $_GET['ccd_saved'] ) ) : ?><div class="ccd-notice"><?php esc_html_e( 'Content saved.', 'client-content-dashboard' ); ?></div><?php endif; ?>
-		<h2><?php echo $edit_id ? esc_html__( 'Edit Content', 'client-content-dashboard' ) : esc_html__( 'Add New Content', 'client-content-dashboard' ); ?></h2>
-		<?php self::render_form( $edit_id ); ?>
-		<h2><?php esc_html_e( 'My Content', 'client-content-dashboard' ); ?></h2><?php self::render_list(); ?>
+		<section class="ccd-dashboard-section ccd-compose-section"><div class="ccd-section-heading"><h2><?php echo $edit_id ? esc_html__( 'Edit Content', 'client-content-dashboard' ) : esc_html__( 'Add New Content', 'client-content-dashboard' ); ?></h2><p><?php esc_html_e( 'Choose a template and add the details below.', 'client-content-dashboard' ); ?></p></div><?php self::render_form( $edit_id ); ?></section>
+		<section class="ccd-dashboard-section ccd-content-section"><div class="ccd-section-heading"><h2><?php esc_html_e( 'My Content', 'client-content-dashboard' ); ?></h2><p><?php esc_html_e( 'Review and update content you have created.', 'client-content-dashboard' ); ?></p></div><?php self::render_list(); ?></section>
 		</div><?php
 		return ob_get_clean();
 	}
@@ -209,7 +220,7 @@ class CCD_Dashboard {
 		<?php if ( isset( $shared_fields['post_title'] ) ) { self::render_field( $shared_fields['post_title'], $post, 'shared' ); } ?>
 		<?php if ( isset( $shared_fields['post_content'] ) ) { self::render_field( $shared_fields['post_content'], $post, 'shared' ); } ?>
 		<?php foreach ( $templates as $key => $template ) : ?><div class="ccd-template-fields" data-template="<?php echo esc_attr( $key ); ?>"<?php echo $selected !== $key ? ' hidden' : ''; ?>><?php foreach ( $template['fields'] as $field ) { if ( ! in_array( $field['map'], array( 'post_title', 'post_content' ), true ) ) { self::render_field( $field, $post, $key ); } } ?></div><?php endforeach; ?>
-		<button type="submit"><?php esc_html_e( 'Save Content', 'client-content-dashboard' ); ?></button></form><?php
+		<button class="ccd-submit" type="submit"><?php esc_html_e( 'Save Content', 'client-content-dashboard' ); ?></button></form><?php
 	}
 
 	private static function render_field( $field, $post, $template_key ) {
@@ -249,7 +260,7 @@ class CCD_Dashboard {
 
 	private static function render_list() {
 		$posts = get_posts( array( 'author' => get_current_user_id(), 'post_type' => 'post', 'post_status' => array( 'draft', 'pending', 'publish', 'private' ), 'posts_per_page' => 50, 'meta_key' => '_ccd_content_template' ) );
-		if ( ! $posts ) { echo '<p>' . esc_html__( 'No content yet.', 'client-content-dashboard' ) . '</p>'; return; }
+		if ( ! $posts ) { echo '<p class="ccd-empty-state">' . esc_html__( 'No content yet.', 'client-content-dashboard' ) . '</p>'; return; }
 		echo '<div class="ccd-content-list">';
 		foreach ( $posts as $post ) { $url = add_query_arg( 'ccd_edit', $post->ID ); echo '<div><strong>' . esc_html( get_the_title( $post ) ) . '</strong><span>' . esc_html( get_post_status_object( $post->post_status )->label ) . '</span><a href="' . esc_url( $url ) . '">' . esc_html__( 'Edit', 'client-content-dashboard' ) . '</a></div>'; }
 		echo '</div>';
