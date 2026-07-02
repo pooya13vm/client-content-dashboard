@@ -19,11 +19,11 @@ class CCD_Dashboard_Page {
 		$configured_id = empty( $settings['dashboard_page_id'] ) ? 0 : absint( $settings['dashboard_page_id'] );
 		$configured = $configured_id ? get_post( $configured_id ) : null;
 
-		// Never replace a valid page selected by an administrator.
-		if ( $configured && 'trash' !== $configured->post_status ) { return $configured_id; }
+		// Never replace or retarget a valid admin-selected page during automatic setup.
+		if ( $configured && 'trash' !== $configured->post_status && ! $repair_configured ) { return $configured_id; }
 		if ( $configured_id && ! $repair_configured ) { return 0; }
 
-		$page = $configured && 'trash' === $configured->post_status ? $configured : get_page_by_path( self::PAGE_SLUG, OBJECT, 'page' );
+		$page = $configured ? $configured : get_page_by_path( self::PAGE_SLUG, OBJECT, 'page' );
 		$page_data = array(
 			'post_type'    => 'page',
 			'post_title'   => __( 'Client Dashboard', 'client-content-dashboard' ),
@@ -41,9 +41,49 @@ class CCD_Dashboard_Page {
 		}
 
 		if ( is_wp_error( $page_id ) || ! $page_id ) { return 0; }
+		self::apply_clean_template( absint( $page_id ) );
 		$settings['dashboard_page_id'] = absint( $page_id );
 		update_option( 'ccd_settings', $settings );
 		return absint( $page_id );
+	}
+
+	private static function apply_clean_template( $page_id ) {
+		$page = get_post( $page_id );
+		if ( ! $page ) { return; }
+		$templates = get_page_templates( $page, 'page' );
+		if ( ! is_array( $templates ) ) { return; }
+
+		// Prefer Elementor's clean templates without requiring Elementor itself.
+		$candidates = array( 'elementor_canvas', 'elementor_header_footer', 'full-width.php', 'blank.php', 'page-blank.php', 'canvas.php' );
+		foreach ( $candidates as $candidate ) {
+			if ( in_array( $candidate, $templates, true ) ) {
+				update_post_meta( $page_id, '_wp_page_template', $candidate );
+				return;
+			}
+		}
+
+		// Some themes/plugins use different file values but recognizable labels.
+		$label_preferences = array( 'elementor canvas', 'elementor full width', 'full width', 'blank', 'canvas' );
+		foreach ( $label_preferences as $preference ) {
+			foreach ( $templates as $label => $template ) {
+				if ( false !== strpos( strtolower( $label ), $preference ) ) {
+					update_post_meta( $page_id, '_wp_page_template', $template );
+					return;
+				}
+			}
+		}
+		// With no clean registered template, retain the current/default template.
+	}
+
+	private static function template_label( $page ) {
+		if ( ! $page ) { return '—'; }
+		$template = get_page_template_slug( $page );
+		if ( ! $template || 'default' === $template ) { return __( 'Default Template', 'client-content-dashboard' ); }
+		if ( 'elementor_canvas' === $template ) { return __( 'Elementor Canvas', 'client-content-dashboard' ); }
+		if ( 'elementor_header_footer' === $template ) { return __( 'Elementor Full Width', 'client-content-dashboard' ); }
+		$templates = get_page_templates( $page, 'page' );
+		$label = is_array( $templates ) ? array_search( $template, $templates, true ) : false;
+		return $label ? sprintf( '%1$s (%2$s)', $label, $template ) : $template;
 	}
 
 	public static function handle_recreate() {
@@ -76,7 +116,9 @@ class CCD_Dashboard_Page {
 		<tr><th><?php esc_html_e( 'Current status', 'client-content-dashboard' ); ?></th><td><?php echo esc_html( $status['state'] ); ?></td></tr>
 		<tr><th><?php esc_html_e( 'Page title', 'client-content-dashboard' ); ?></th><td><?php echo $status['page'] ? esc_html( get_the_title( $status['page'] ) ) : '&mdash;'; ?></td></tr>
 		<tr><th><?php esc_html_e( 'Page URL', 'client-content-dashboard' ); ?></th><td><?php if ( $status['page'] && 'trashed' !== $status['state'] ) : $url = get_permalink( $status['page'] ); ?><a href="<?php echo esc_url( $url ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $url ); ?></a><?php else : ?>&mdash;<?php endif; ?></td></tr>
+		<tr><th><?php esc_html_e( 'Page template', 'client-content-dashboard' ); ?></th><td><?php echo esc_html( self::template_label( $status['page'] ) ); ?></td></tr>
 		</tbody></table>
+		<p class="description"><?php esc_html_e( 'For the cleanest portal layout, Elementor Canvas is recommended when available.', 'client-content-dashboard' ); ?></p>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 		<input type="hidden" name="action" value="ccd_recreate_dashboard_page">
 		<?php wp_nonce_field( 'ccd_recreate_dashboard_page', 'ccd_dashboard_page_nonce' ); ?>
