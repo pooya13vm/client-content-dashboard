@@ -29,18 +29,32 @@ class CCD_Admin {
 
 	public static function page() {
 		if ( ! current_user_can( 'manage_options' ) ) { return; }
+		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'settings';
+		if ( ! in_array( $tab, array( 'settings', 'client-users', 'tools' ), true ) ) { $tab = 'settings'; }
 		$s = wp_parse_args( get_option( 'ccd_settings', array() ), array( 'dashboard_page_id' => 0, 'default_post_status' => 'draft', 'hide_wp_admin' => 1, 'max_upload_mb' => 5, 'max_gallery_images' => 8 ) );
 		?>
 		<div class="wrap"><h1><?php esc_html_e( 'Client Dashboard Settings', 'client-content-dashboard' ); ?></h1>
+		<nav class="nav-tab-wrapper" aria-label="<?php esc_attr_e( 'Client Dashboard sections', 'client-content-dashboard' ); ?>">
+		<?php
+		$tabs = array( 'settings' => __( 'Settings', 'client-content-dashboard' ), 'client-users' => __( 'Client Users', 'client-content-dashboard' ), 'tools' => __( 'Tools', 'client-content-dashboard' ) );
+		foreach ( $tabs as $key => $label ) {
+			$url = add_query_arg( array( 'page' => 'client-content-dashboard', 'tab' => $key ), admin_url( 'admin.php' ) );
+			echo '<a class="nav-tab ' . ( $tab === $key ? 'nav-tab-active' : '' ) . '" href="' . esc_url( $url ) . '">' . esc_html( $label ) . '</a>';
+		}
+		?>
+		</nav>
+		<?php if ( 'settings' === $tab ) : ?>
 		<form method="post" action="options.php"><?php settings_fields( 'ccd_settings_group' ); ?>
 		<table class="form-table" role="presentation">
-		<tr><th><?php esc_html_e( 'Dashboard Page', 'client-content-dashboard' ); ?></th><td><?php wp_dropdown_pages( array( 'name' => 'ccd_settings[dashboard_page_id]', 'selected' => $s['dashboard_page_id'], 'show_option_none' => __( 'Select a page', 'client-content-dashboard' ) ) ); ?><p class="description"><?php esc_html_e( 'Place [client_content_dashboard] on this page.', 'client-content-dashboard' ); ?></p></td></tr>
+		<tr><th><?php esc_html_e( 'Dashboard Page', 'client-content-dashboard' ); ?></th><td><?php wp_dropdown_pages( array( 'name' => 'ccd_settings[dashboard_page_id]', 'selected' => $s['dashboard_page_id'], 'show_option_none' => __( 'Select a page', 'client-content-dashboard' ) ) ); ?><?php $dashboard_page = get_post( absint( $s['dashboard_page_id'] ) ); if ( $dashboard_page && 'trash' !== $dashboard_page->post_status ) : ?> <a href="<?php echo esc_url( get_permalink( $dashboard_page ) ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'View Dashboard', 'client-content-dashboard' ); ?></a><?php endif; ?><p class="description"><?php esc_html_e( 'Place [client_content_dashboard] on this page.', 'client-content-dashboard' ); ?></p></td></tr>
 		<tr><th><?php esc_html_e( 'Default Post Status', 'client-content-dashboard' ); ?></th><td><select name="ccd_settings[default_post_status]"><option value="draft" <?php selected( $s['default_post_status'], 'draft' ); ?>><?php esc_html_e( 'Draft', 'client-content-dashboard' ); ?></option><option value="pending" <?php selected( $s['default_post_status'], 'pending' ); ?>><?php esc_html_e( 'Pending Review', 'client-content-dashboard' ); ?></option></select></td></tr>
 		<tr><th><?php esc_html_e( 'Hide wp-admin', 'client-content-dashboard' ); ?></th><td><label><input type="checkbox" name="ccd_settings[hide_wp_admin]" value="1" <?php checked( $s['hide_wp_admin'], 1 ); ?>> <?php esc_html_e( 'Redirect Client Editors to the frontend dashboard', 'client-content-dashboard' ); ?></label></td></tr>
 		<tr><th><?php esc_html_e( 'Maximum Upload Size', 'client-content-dashboard' ); ?></th><td><input type="number" min="1" max="100" name="ccd_settings[max_upload_mb]" value="<?php echo esc_attr( $s['max_upload_mb'] ); ?>"> MB</td></tr>
 		<tr><th><?php esc_html_e( 'Maximum Gallery Images', 'client-content-dashboard' ); ?></th><td><input type="number" min="1" max="50" name="ccd_settings[max_gallery_images]" value="<?php echo esc_attr( $s['max_gallery_images'] ); ?>"></td></tr>
 		</table><?php submit_button(); ?></form>
-		<?php CCD_Client_Users::render(); ?>
+		<?php elseif ( 'client-users' === $tab ) : CCD_Client_Users::render(); ?>
+		<?php elseif ( 'tools' === $tab ) : CCD_Dashboard_Page::render_tools(); ?>
+		<?php endif; ?>
 		</div><?php
 	}
 

@@ -26,7 +26,7 @@ class CCD_Client_Users {
 			else { $result = 'failed'; }
 		}
 
-		wp_safe_redirect( add_query_arg( array( 'page' => 'client-content-dashboard', 'ccd_user_result' => $result ), admin_url( 'admin.php' ) ) );
+		wp_safe_redirect( add_query_arg( array( 'page' => 'client-content-dashboard', 'tab' => 'client-users', 'ccd_user_result' => $result ), admin_url( 'admin.php' ) ) );
 		exit;
 	}
 

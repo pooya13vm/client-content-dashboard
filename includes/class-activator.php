@@ -26,6 +26,8 @@ class CCD_Activator {
 				'max_gallery_images'  => 8,
 			) );
 		}
+
+		CCD_Dashboard_Page::create_on_activation();
 	}
 
 	public static function deactivate() {
