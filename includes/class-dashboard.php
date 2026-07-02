@@ -14,6 +14,10 @@ class CCD_Dashboard {
 		if ( ! is_singular() || ! has_shortcode( (string) get_post_field( 'post_content', get_queried_object_id() ), 'client_content_dashboard' ) ) { return; }
 		wp_enqueue_style( 'ccd-dashboard', CCD_URL . 'assets/css/dashboard.css', array(), CCD_VERSION );
 		wp_enqueue_script( 'ccd-dashboard', CCD_URL . 'assets/js/dashboard.js', array(), CCD_VERSION, true );
+		if ( self::can_access() ) {
+			wp_enqueue_editor();
+			if ( current_user_can( 'upload_files' ) ) { wp_enqueue_media(); }
+		}
 	}
 
 	public static function handle_submission() {
@@ -186,16 +190,37 @@ class CCD_Dashboard {
 		<?php wp_nonce_field( 'ccd_save_content', 'ccd_nonce' ); ?><input type="hidden" name="ccd_action" value="save_content"><input type="hidden" name="ccd_post_id" value="<?php echo esc_attr( $post_id ); ?>">
 		<label><?php esc_html_e( 'Content Template', 'client-content-dashboard' ); ?><select name="ccd_template" id="ccd-template" <?php disabled( (bool) $post_id ); ?>><?php foreach ( $templates as $key => $template ) : ?><option value="<?php echo esc_attr( $key ); ?>" <?php selected( $selected, $key ); ?>><?php echo esc_html( $template['label'] ); ?></option><?php endforeach; ?></select></label>
 		<?php if ( $post_id ) : ?><input type="hidden" name="ccd_template" value="<?php echo esc_attr( $selected ); ?>"><?php endif; ?>
-		<?php foreach ( $templates as $key => $template ) : ?><div class="ccd-template-fields" data-template="<?php echo esc_attr( $key ); ?>"<?php echo $selected !== $key ? ' hidden' : ''; ?>><?php foreach ( $template['fields'] as $field ) { self::render_field( $field, $post ); } ?></div><?php endforeach; ?>
+		<?php foreach ( $templates as $key => $template ) : ?><div class="ccd-template-fields" data-template="<?php echo esc_attr( $key ); ?>"<?php echo $selected !== $key ? ' hidden' : ''; ?>><?php foreach ( $template['fields'] as $field ) { self::render_field( $field, $post, $key ); } ?></div><?php endforeach; ?>
 		<button type="submit"><?php esc_html_e( 'Save Content', 'client-content-dashboard' ); ?></button></form><?php
 	}
 
-	private static function render_field( $field, $post ) {
+	private static function render_field( $field, $post, $template_key ) {
 		$value = '';
 		if ( $post && 'post_title' === $field['map'] ) { $value = $post->post_title; }
 		elseif ( $post && 'post_content' === $field['map'] ) { $value = $post->post_content; }
 		elseif ( $post && 'meta' === $field['map'] && 'gallery' !== $field['type'] ) { $value = get_post_meta( $post->ID, $field['meta_key'], true ); }
 		$required = ! empty( $field['required'] ) ? ' required' : '';
+		if ( 'post_content' === $field['map'] || 'rich_text' === $field['type'] ) {
+			$editor_id = 'ccd_editor_' . sanitize_key( $template_key ) . '_' . sanitize_key( $field['key'] );
+			?><div class="ccd-field ccd-rich-text-field"><label for="<?php echo esc_attr( $editor_id ); ?>"><?php echo esc_html( $field['label'] ); ?></label><?php
+			wp_editor(
+				$value,
+				$editor_id,
+				array(
+					'textarea_name' => $field['key'],
+					'media_buttons' => current_user_can( 'upload_files' ),
+					'teeny'         => false,
+					'quicktags'     => true,
+					'editor_height' => 360,
+					'tinymce'       => array(
+						'toolbar1' => 'formatselect,bold,italic,bullist,numlist,blockquote,link,unlink,undo,redo',
+						'toolbar2' => '',
+					),
+				)
+			);
+			echo '</div>';
+			return;
+		}
 		?><label><?php echo esc_html( $field['label'] ); ?><?php
 		if ( 'textarea' === $field['type'] ) : ?><textarea name="<?php echo esc_attr( $field['key'] ); ?>" rows="6"<?php echo esc_attr( $required ); ?>><?php echo esc_textarea( $value ); ?></textarea><?php
 		elseif ( 'taxonomy' === $field['type'] ) : $terms = get_terms( array( 'taxonomy' => $field['taxonomy'], 'hide_empty' => false ) ); $current = $post ? wp_get_object_terms( $post->ID, $field['taxonomy'], array( 'fields' => 'ids' ) ) : array(); ?><select name="<?php echo esc_attr( $field['key'] ); ?>"><option value="0"><?php esc_html_e( 'None', 'client-content-dashboard' ); ?></option><?php if ( ! is_wp_error( $terms ) ) { foreach ( $terms as $term ) { ?><option value="<?php echo esc_attr( $term->term_id ); ?>" <?php selected( in_array( $term->term_id, $current, true ) ); ?>><?php echo esc_html( $term->name ); ?></option><?php } } ?></select><?php
