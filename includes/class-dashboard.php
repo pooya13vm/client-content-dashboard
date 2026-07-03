@@ -22,7 +22,6 @@ class CCD_Dashboard {
 	public static function assets() {
 		if ( ! is_singular() || ! has_shortcode( (string) get_post_field( 'post_content', get_queried_object_id() ), 'client_content_dashboard' ) ) { return; }
 		wp_enqueue_style( 'ccd-dashboard', CCD_URL . 'assets/css/dashboard.css', array(), CCD_VERSION );
-		wp_enqueue_script( 'ccd-dashboard', CCD_URL . 'assets/js/dashboard.js', array(), CCD_VERSION, true );
 		if ( self::can_access() ) {
 			add_filter( 'wp_default_editor', array( __CLASS__, 'default_editor' ) );
 			wp_enqueue_editor();
@@ -47,13 +46,11 @@ class CCD_Dashboard {
 		if ( ! self::can_access() ) { wp_die( esc_html__( 'You are not allowed to create content.', 'client-content-dashboard' ), '', array( 'response' => 403 ) ); }
 		if ( empty( $_POST['ccd_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['ccd_nonce'] ) ), 'ccd_save_content' ) ) { wp_die( esc_html__( 'Security check failed.', 'client-content-dashboard' ), 403 ); }
 
-		$template_key = isset( $_POST['ccd_template'] ) ? sanitize_key( $_POST['ccd_template'] ) : '';
-		$template = CCD_Templates::get( $template_key );
-		if ( ! $template ) { wp_die( esc_html__( 'Invalid content template.', 'client-content-dashboard' ), 400 ); }
+		$template = CCD_Templates::get( 'article' );
+		if ( ! $template ) { wp_die( esc_html__( 'The article form is unavailable.', 'client-content-dashboard' ), 500 ); }
 
 		$post_id = isset( $_POST['ccd_post_id'] ) ? absint( $_POST['ccd_post_id'] ) : 0;
 		if ( $post_id && ! self::can_edit( $post_id ) ) { wp_die( esc_html__( 'You cannot edit this content.', 'client-content-dashboard' ), 403 ); }
-		if ( $post_id && get_post_meta( $post_id, '_ccd_content_template', true ) !== $template_key ) { wp_die( esc_html__( 'Template mismatch.', 'client-content-dashboard' ), 400 ); }
 
 		$data = array( 'post_type' => $template['post_type'] );
 		foreach ( $template['fields'] as $field ) {
@@ -79,7 +76,8 @@ class CCD_Dashboard {
 		$result = $post_id ? wp_update_post( array_merge( $data, array( 'ID' => $post_id ) ), true ) : wp_insert_post( $data, true );
 		if ( is_wp_error( $result ) ) { wp_die( esc_html( $result->get_error_message() ) ); }
 		$post_id = (int) $result;
-		update_post_meta( $post_id, '_ccd_content_template', $template_key );
+		// Keep legacy template metadata intact; new articles use the internal MVP marker.
+		if ( '' === get_post_meta( $post_id, '_ccd_content_template', true ) ) { update_post_meta( $post_id, '_ccd_content_template', 'article' ); }
 
 		foreach ( $template['fields'] as $field ) {
 			self::save_field( $post_id, $field, $settings );
@@ -262,7 +260,7 @@ class CCD_Dashboard {
 			self::render_header( __( 'Articles', 'client-content-dashboard' ), __( 'Review and update all content you have created.', 'client-content-dashboard' ), $add_button );
 			self::render_list( array( 'draft', 'pending', 'publish', 'private', 'future' ) );
 		} elseif ( 'add' === $view ) {
-			self::render_header( $edit_id ? __( 'Edit Article', 'client-content-dashboard' ) : __( 'Add Article', 'client-content-dashboard' ), __( 'Choose a template and add the article details below.', 'client-content-dashboard' ) );
+			self::render_header( $edit_id ? __( 'Edit Article', 'client-content-dashboard' ) : __( 'Add Article', 'client-content-dashboard' ), __( 'Add the article details below.', 'client-content-dashboard' ) );
 			self::render_form( $edit_id );
 		} elseif ( 'drafts' === $view ) {
 			self::render_header( __( 'Drafts', 'client-content-dashboard' ), __( 'Continue working on articles that are not yet published.', 'client-content-dashboard' ), $add_button );
@@ -310,22 +308,11 @@ class CCD_Dashboard {
 	}
 
 	private static function render_form( $post_id ) {
-		$templates = CCD_Templates::all();
-		$selected = $post_id ? get_post_meta( $post_id, '_ccd_content_template', true ) : array_key_first( $templates );
+		$template = CCD_Templates::get( 'article' );
 		$post = $post_id ? get_post( $post_id ) : null;
-		$shared_fields = array();
-		if ( isset( $templates[ $selected ]['fields'] ) ) {
-			foreach ( $templates[ $selected ]['fields'] as $field ) {
-				if ( in_array( $field['map'], array( 'post_title', 'post_content' ), true ) ) { $shared_fields[ $field['map'] ] = $field; }
-			}
-		}
 		?><form class="ccd-form" method="post" enctype="multipart/form-data">
 		<?php wp_nonce_field( 'ccd_save_content', 'ccd_nonce' ); ?><input type="hidden" name="ccd_action" value="save_content"><input type="hidden" name="ccd_post_id" value="<?php echo esc_attr( $post_id ); ?>">
-		<label><?php esc_html_e( 'Content Template', 'client-content-dashboard' ); ?><select name="ccd_template" id="ccd-template" <?php disabled( (bool) $post_id ); ?>><?php foreach ( $templates as $key => $template ) : ?><option value="<?php echo esc_attr( $key ); ?>" <?php selected( $selected, $key ); ?>><?php echo esc_html( $template['label'] ); ?></option><?php endforeach; ?></select></label>
-		<?php if ( $post_id ) : ?><input type="hidden" name="ccd_template" value="<?php echo esc_attr( $selected ); ?>"><?php endif; ?>
-		<?php if ( isset( $shared_fields['post_title'] ) ) { self::render_field( $shared_fields['post_title'], $post, 'shared' ); } ?>
-		<?php if ( isset( $shared_fields['post_content'] ) ) { self::render_field( $shared_fields['post_content'], $post, 'shared' ); } ?>
-		<?php foreach ( $templates as $key => $template ) : ?><div class="ccd-template-fields" data-template="<?php echo esc_attr( $key ); ?>"<?php echo $selected !== $key ? ' hidden' : ''; ?>><?php foreach ( $template['fields'] as $field ) { if ( ! in_array( $field['map'], array( 'post_title', 'post_content' ), true ) ) { self::render_field( $field, $post, $key ); } } ?></div><?php endforeach; ?>
+		<?php foreach ( $template['fields'] as $field ) { self::render_field( $field, $post, 'article' ); } ?>
 		<div class="ccd-form-actions"><button class="ccd-secondary-action" type="submit" name="ccd_save_intent" value="draft"><?php esc_html_e( 'Save Draft', 'client-content-dashboard' ); ?></button><?php if ( self::can_publish() ) : ?><button class="ccd-submit" type="submit" name="ccd_save_intent" value="publish"><?php echo 'publish' === ( $post ? $post->post_status : '' ) ? esc_html__( 'Update Published Article', 'client-content-dashboard' ) : esc_html__( 'Publish', 'client-content-dashboard' ); ?></button><?php endif; ?></div></form><?php
 	}
 
@@ -367,15 +354,12 @@ class CCD_Dashboard {
 	private static function render_list( $statuses, $empty_message = '' ) {
 		$posts = get_posts( array( 'author' => get_current_user_id(), 'post_type' => 'post', 'post_status' => $statuses, 'posts_per_page' => 50, 'meta_key' => '_ccd_content_template' ) );
 		if ( ! $posts ) { echo '<p class="ccd-empty-state">' . esc_html( $empty_message ? $empty_message : __( 'No articles found.', 'client-content-dashboard' ) ) . '</p>'; return; }
-		$templates = CCD_Templates::all();
-		echo '<div class="ccd-content-list"><div class="ccd-list-head"><span>' . esc_html__( 'Title', 'client-content-dashboard' ) . '</span><span>' . esc_html__( 'Status', 'client-content-dashboard' ) . '</span><span>' . esc_html__( 'Modified', 'client-content-dashboard' ) . '</span><span>' . esc_html__( 'Template', 'client-content-dashboard' ) . '</span><span>' . esc_html__( 'Actions', 'client-content-dashboard' ) . '</span></div>';
+		echo '<div class="ccd-content-list"><div class="ccd-list-head"><span>' . esc_html__( 'Title', 'client-content-dashboard' ) . '</span><span>' . esc_html__( 'Status', 'client-content-dashboard' ) . '</span><span>' . esc_html__( 'Modified', 'client-content-dashboard' ) . '</span><span>' . esc_html__( 'Actions', 'client-content-dashboard' ) . '</span></div>';
 		foreach ( $posts as $post ) {
 			$status = get_post_status_object( $post->post_status );
-			$template_key = get_post_meta( $post->ID, '_ccd_content_template', true );
-			$template = isset( $templates[ $template_key ] ) ? $templates[ $template_key ]['label'] : $template_key;
 			$edit_url = self::view_url( 'add', array( 'ccd_edit' => $post->ID ) );
 			$preview_url = 'publish' === $post->post_status ? get_permalink( $post ) : get_preview_post_link( $post );
-			echo '<div class="ccd-list-row"><strong data-label="' . esc_attr__( 'Title', 'client-content-dashboard' ) . '">' . esc_html( get_the_title( $post ) ? get_the_title( $post ) : __( '(Untitled)', 'client-content-dashboard' ) ) . '</strong><span class="ccd-status" data-label="' . esc_attr__( 'Status', 'client-content-dashboard' ) . '">' . esc_html( $status ? $status->label : $post->post_status ) . '</span><span data-label="' . esc_attr__( 'Modified', 'client-content-dashboard' ) . '">' . esc_html( get_the_modified_date( '', $post ) ) . '</span><span data-label="' . esc_attr__( 'Template', 'client-content-dashboard' ) . '">' . esc_html( $template ) . '</span><div class="ccd-row-actions" data-label="' . esc_attr__( 'Actions', 'client-content-dashboard' ) . '"><a href="' . esc_url( $edit_url ) . '">' . esc_html__( 'Edit', 'client-content-dashboard' ) . '</a>' . ( $preview_url ? '<a href="' . esc_url( $preview_url ) . '" target="_blank" rel="noopener noreferrer">' . ( 'publish' === $post->post_status ? esc_html__( 'View', 'client-content-dashboard' ) : esc_html__( 'Preview', 'client-content-dashboard' ) ) . '</a>' : '' );
+			echo '<div class="ccd-list-row"><strong data-label="' . esc_attr__( 'Title', 'client-content-dashboard' ) . '">' . esc_html( get_the_title( $post ) ? get_the_title( $post ) : __( '(Untitled)', 'client-content-dashboard' ) ) . '</strong><span class="ccd-status" data-label="' . esc_attr__( 'Status', 'client-content-dashboard' ) . '">' . esc_html( $status ? $status->label : $post->post_status ) . '</span><span data-label="' . esc_attr__( 'Modified', 'client-content-dashboard' ) . '">' . esc_html( get_the_modified_date( '', $post ) ) . '</span><div class="ccd-row-actions" data-label="' . esc_attr__( 'Actions', 'client-content-dashboard' ) . '"><a href="' . esc_url( $edit_url ) . '">' . esc_html__( 'Edit', 'client-content-dashboard' ) . '</a>' . ( $preview_url ? '<a href="' . esc_url( $preview_url ) . '" target="_blank" rel="noopener noreferrer">' . ( 'publish' === $post->post_status ? esc_html__( 'View', 'client-content-dashboard' ) : esc_html__( 'Preview', 'client-content-dashboard' ) ) . '</a>' : '' );
 			if ( 'draft' === $post->post_status && self::can_publish() ) {
 				echo '<form method="post" action=""><input type="hidden" name="ccd_action" value="publish_content"><input type="hidden" name="ccd_post_id" value="' . esc_attr( $post->ID ) . '">' . wp_nonce_field( 'ccd_publish_post_' . $post->ID, 'ccd_publish_nonce', true, false ) . '<button type="submit">' . esc_html__( 'Publish', 'client-content-dashboard' ) . '</button></form>';
 			}

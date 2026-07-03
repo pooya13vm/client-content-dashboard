@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Client Content Dashboard
  * Description: A simplified frontend dashboard for clients to create and manage structured content.
- * Version: 0.2.6
+ * Version: 0.2.9
  * Author: Client Content Dashboard
  * Text Domain: client-content-dashboard
  * Requires at least: 6.2
@@ -25,6 +25,7 @@ require_once CCD_DIR . 'includes/class-templates.php';
 require_once CCD_DIR . 'includes/class-admin.php';
 require_once CCD_DIR . 'includes/class-client-users.php';
 require_once CCD_DIR . 'includes/class-dashboard.php';
+require_once CCD_DIR . 'includes/class-article-display.php';
 require_once CCD_DIR . 'includes/class-updater.php';
 
 register_activation_hook( __FILE__, array( 'CCD_Activator', 'activate' ) );
@@ -36,6 +37,7 @@ function ccd_boot_plugin() {
 	CCD_Dashboard_Page::init();
 	CCD_Client_Users::init();
 	CCD_Dashboard::init();
+	CCD_Article_Display::init();
 	CCD_Updater::init( CCD_FILE );
 }
 add_action( 'plugins_loaded', 'ccd_boot_plugin' );
