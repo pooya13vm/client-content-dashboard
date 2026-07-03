@@ -23,6 +23,7 @@ class CCD_Activator {
 				'max_upload_mb'       => 5,
 				'max_gallery_images'  => 8,
 				'article_display_layout' => 'clean',
+				'article_template_page_id' => 0,
 			) );
 		}
 

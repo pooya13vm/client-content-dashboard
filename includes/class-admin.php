@@ -24,7 +24,8 @@ class CCD_Admin {
 			'hide_wp_admin'       => empty( $input['hide_wp_admin'] ) ? 0 : 1,
 			'max_upload_mb'       => isset( $input['max_upload_mb'] ) ? max( 1, min( 100, absint( $input['max_upload_mb'] ) ) ) : 5,
 			'max_gallery_images'  => isset( $input['max_gallery_images'] ) ? max( 1, min( 50, absint( $input['max_gallery_images'] ) ) ) : 8,
-			'article_display_layout' => isset( $input['article_display_layout'] ) && 'clean' === $input['article_display_layout'] ? 'clean' : 'theme',
+			'article_display_layout' => isset( $input['article_display_layout'] ) && in_array( $input['article_display_layout'], array( 'theme', 'clean', 'template' ), true ) ? $input['article_display_layout'] : 'clean',
+			'article_template_page_id' => isset( $input['article_template_page_id'] ) ? absint( $input['article_template_page_id'] ) : 0,
 		);
 	}
 
@@ -32,7 +33,7 @@ class CCD_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) { return; }
 		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'settings';
 		if ( ! in_array( $tab, array( 'settings', 'client-users', 'tools' ), true ) ) { $tab = 'settings'; }
-		$s = wp_parse_args( get_option( 'ccd_settings', array() ), array( 'dashboard_page_id' => 0, 'default_post_status' => 'draft', 'hide_wp_admin' => 1, 'max_upload_mb' => 5, 'max_gallery_images' => 8, 'article_display_layout' => 'clean' ) );
+		$s = wp_parse_args( get_option( 'ccd_settings', array() ), array( 'dashboard_page_id' => 0, 'default_post_status' => 'draft', 'hide_wp_admin' => 1, 'max_upload_mb' => 5, 'max_gallery_images' => 8, 'article_display_layout' => 'clean', 'article_template_page_id' => 0 ) );
 		?>
 		<div class="wrap"><h1><?php esc_html_e( 'Client Dashboard Settings', 'client-content-dashboard' ); ?></h1>
 		<nav class="nav-tab-wrapper" aria-label="<?php esc_attr_e( 'Client Dashboard sections', 'client-content-dashboard' ); ?>">
@@ -52,8 +53,9 @@ class CCD_Admin {
 		<tr><th><?php esc_html_e( 'Hide wp-admin', 'client-content-dashboard' ); ?></th><td><label><input type="checkbox" name="ccd_settings[hide_wp_admin]" value="1" <?php checked( $s['hide_wp_admin'], 1 ); ?>> <?php esc_html_e( 'Redirect Client Editors to the frontend dashboard', 'client-content-dashboard' ); ?></label></td></tr>
 		<tr><th><?php esc_html_e( 'Maximum Upload Size', 'client-content-dashboard' ); ?></th><td><input type="number" min="1" max="100" name="ccd_settings[max_upload_mb]" value="<?php echo esc_attr( $s['max_upload_mb'] ); ?>"> MB</td></tr>
 		<tr><th><?php esc_html_e( 'Maximum Gallery Images', 'client-content-dashboard' ); ?></th><td><input type="number" min="1" max="50" name="ccd_settings[max_gallery_images]" value="<?php echo esc_attr( $s['max_gallery_images'] ); ?>"></td></tr>
-		<tr><th><?php esc_html_e( 'Article Display Layout', 'client-content-dashboard' ); ?></th><td><select name="ccd_settings[article_display_layout]"><option value="theme" <?php selected( $s['article_display_layout'], 'theme' ); ?>><?php esc_html_e( 'Use Theme Default', 'client-content-dashboard' ); ?></option><option value="clean" <?php selected( $s['article_display_layout'], 'clean' ); ?>><?php esc_html_e( 'Use Plugin Clean Layout', 'client-content-dashboard' ); ?></option></select><p class="description"><?php esc_html_e( 'Use Plugin Clean Layout to keep the active theme’s normal post page while improving article content readability.', 'client-content-dashboard' ); ?><br><?php esc_html_e( 'Use Theme Default if your theme or site builder already provides a good Single Post template.', 'client-content-dashboard' ); ?></p></td></tr>
-		</table><?php submit_button(); ?></form>
+		<tr><th><?php esc_html_e( 'Article Display Layout', 'client-content-dashboard' ); ?></th><td><select id="ccd-article-display-layout" name="ccd_settings[article_display_layout]"><option value="theme" <?php selected( $s['article_display_layout'], 'theme' ); ?>><?php esc_html_e( 'Use Theme Default', 'client-content-dashboard' ); ?></option><option value="clean" <?php selected( $s['article_display_layout'], 'clean' ); ?>><?php esc_html_e( 'Use Plugin Clean Layout', 'client-content-dashboard' ); ?></option><option value="template" <?php selected( $s['article_display_layout'], 'template' ); ?>><?php esc_html_e( 'Use Template Page', 'client-content-dashboard' ); ?></option></select><p class="description"><?php esc_html_e( 'Use Plugin Clean Layout to keep the active theme’s normal post page while improving article content readability.', 'client-content-dashboard' ); ?><br><?php esc_html_e( 'Use Theme Default if your theme or site builder already provides a good Single Post template.', 'client-content-dashboard' ); ?></p></td></tr>
+		<tr id="ccd-article-template-page-row"<?php echo 'template' !== $s['article_display_layout'] ? ' style="display:none"' : ''; ?>><th><?php esc_html_e( 'Article Template Page', 'client-content-dashboard' ); ?></th><td><?php wp_dropdown_pages( array( 'name' => 'ccd_settings[article_template_page_id]', 'selected' => $s['article_template_page_id'], 'show_option_none' => __( 'Select a page', 'client-content-dashboard' ) ) ); ?><p class="description"><?php esc_html_e( 'Create a normal WordPress page with your preferred layout/header/footer, then place [ccd_article] where the article should appear.', 'client-content-dashboard' ); ?></p></td></tr>
+		</table><?php submit_button(); ?></form><script>document.addEventListener('DOMContentLoaded',function(){var s=document.getElementById('ccd-article-display-layout'),r=document.getElementById('ccd-article-template-page-row');if(!s||!r)return;function t(){r.style.display=s.value==='template'?'':'none';}s.addEventListener('change',t);t();});</script>
 		<?php elseif ( 'client-users' === $tab ) : CCD_Client_Users::render(); ?>
 		<?php elseif ( 'tools' === $tab ) : CCD_Dashboard_Page::render_tools(); ?>
 		<?php endif; ?>

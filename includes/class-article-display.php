@@ -2,10 +2,16 @@
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class CCD_Article_Display {
+	private static $article = null;
+	private static $rendering_article = false;
+
 	public static function init() {
 		add_filter( 'the_content', array( __CLASS__, 'content' ), 20 );
 		add_filter( 'get_the_categories', array( __CLASS__, 'categories' ), 10, 2 );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ) );
+		add_action( 'template_redirect', array( __CLASS__, 'prepare_template_page' ), 20 );
+		add_shortcode( 'ccd_article', array( __CLASS__, 'shortcode' ) );
+		add_action( 'admin_post_ccd_create_article_template', array( __CLASS__, 'create_template_page' ) );
 	}
 
 	private static function use_clean_layout() {
@@ -29,8 +35,80 @@ class CCD_Article_Display {
 	}
 
 	public static function assets() {
-		if ( self::use_clean_layout() ) {
+		if ( self::use_clean_layout() || self::$article ) {
 			wp_enqueue_style( 'ccd-clean-article', CCD_URL . 'assets/css/article.css', array(), CCD_VERSION );
 		}
+	}
+
+	public static function prepare_template_page() {
+		if ( ! is_singular( 'post' ) ) { return; }
+		$settings = get_option( 'ccd_settings', array() );
+		if ( empty( $settings['article_display_layout'] ) || 'template' !== $settings['article_display_layout'] ) { return; }
+		$article = get_queried_object();
+		if ( ! $article instanceof WP_Post || '' === get_post_meta( $article->ID, '_ccd_content_template', true ) ) { return; }
+		$page_id = empty( $settings['article_template_page_id'] ) ? 0 : absint( $settings['article_template_page_id'] );
+		$page = $page_id ? get_post( $page_id ) : null;
+		if ( ! $page || 'page' !== $page->post_type || 'publish' !== $page->post_status ) { return; }
+
+		self::$article = $article;
+		global $wp_query, $post;
+		$post = $page;
+		$wp_query->posts = array( $page );
+		$wp_query->post = $page;
+		$wp_query->post_count = 1;
+		$wp_query->queried_object = $page;
+		$wp_query->queried_object_id = $page->ID;
+		$wp_query->is_single = false;
+		$wp_query->is_page = true;
+		$wp_query->is_singular = true;
+		setup_postdata( $page );
+	}
+
+	public static function shortcode() {
+		if ( self::$rendering_article ) { return ''; }
+		if ( ! self::$article instanceof WP_Post ) {
+			return current_user_can( 'manage_options' ) ? '<p class="ccd-article-context-note">' . esc_html__( 'The article preview appears here when this page is used as the Client Content Dashboard article template.', 'client-content-dashboard' ) . '</p>' : '';
+		}
+		$article = self::$article;
+		$default_category = absint( get_option( 'default_category' ) );
+		$categories = array_filter( get_the_category( $article->ID ), function( $category ) use ( $default_category ) { return (int) $category->term_id !== $default_category; } );
+		$category_links = array();
+		foreach ( $categories as $category ) { $category_links[] = '<a href="' . esc_url( get_category_link( $category->term_id ) ) . '">' . esc_html( $category->name ) . '</a>'; }
+		global $post;
+		$template_page = $post;
+		$post = $article;
+		setup_postdata( $article );
+		self::$rendering_article = true;
+		$article_content = apply_filters( 'the_content', $article->post_content );
+		self::$rendering_article = false;
+		ob_start();
+		?><article class="ccd-template-article"><header class="ccd-template-article__header"><h1><?php echo esc_html( get_the_title( $article ) ); ?></h1><div class="ccd-template-article__meta"><time datetime="<?php echo esc_attr( get_the_date( 'c', $article ) ); ?>"><?php echo esc_html( get_the_date( '', $article ) ); ?></time><?php if ( $category_links ) : ?><span aria-hidden="true">·</span><span><?php echo wp_kses_post( implode( ', ', $category_links ) ); ?></span><?php endif; ?></div></header><?php if ( has_post_thumbnail( $article ) ) : ?><figure class="ccd-template-article__image"><?php echo get_the_post_thumbnail( $article, 'large' ); ?></figure><?php endif; ?><div class="ccd-public-article"><?php echo $article_content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Filtered WordPress post content. ?></div></article><?php
+		$output = ob_get_clean();
+		$post = $template_page;
+		setup_postdata( $template_page );
+		return $output;
+	}
+
+	public static function create_template_page() {
+		if ( ! current_user_can( 'manage_options' ) ) { wp_die( esc_html__( 'You are not allowed to create template pages.', 'client-content-dashboard' ), '', array( 'response' => 403 ) ); }
+		check_admin_referer( 'ccd_create_article_template', 'ccd_article_template_nonce' );
+		$settings = get_option( 'ccd_settings', array() );
+		$page_id = empty( $settings['article_template_page_id'] ) ? 0 : absint( $settings['article_template_page_id'] );
+		$page = $page_id ? get_post( $page_id ) : null;
+		if ( ! $page || 'page' !== $page->post_type || 'trash' === $page->post_status ) {
+			$existing = get_page_by_path( 'article-template', OBJECT, 'page' );
+			if ( $existing && 'trash' !== $existing->post_status ) { $page_id = $existing->ID; }
+			else { $page_id = wp_insert_post( array( 'post_type' => 'page', 'post_title' => __( 'Article Template', 'client-content-dashboard' ), 'post_name' => 'article-template', 'post_content' => '[ccd_article]', 'post_status' => 'publish' ), true ); }
+		}
+		if ( is_wp_error( $page_id ) || ! $page_id ) { $result = 'failed'; }
+		else { $settings['article_template_page_id'] = absint( $page_id ); $settings['article_display_layout'] = 'template'; update_option( 'ccd_settings', $settings ); $result = 'success'; }
+		wp_safe_redirect( add_query_arg( array( 'page' => 'client-content-dashboard', 'tab' => 'tools', 'ccd_article_template_result' => $result ), admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	public static function render_tools_section() {
+		if ( ! current_user_can( 'manage_options' ) ) { return; }
+		$result = isset( $_GET['ccd_article_template_result'] ) ? sanitize_key( wp_unslash( $_GET['ccd_article_template_result'] ) ) : '';
+		?><hr><h2><?php esc_html_e( 'Article Template Page', 'client-content-dashboard' ); ?></h2><?php if ( 'success' === $result ) : ?><div class="notice notice-success inline"><p><?php esc_html_e( 'Article Template page created and selected.', 'client-content-dashboard' ); ?></p></div><?php elseif ( 'failed' === $result ) : ?><div class="notice notice-error inline"><p><?php esc_html_e( 'Article Template page could not be created.', 'client-content-dashboard' ); ?></p></div><?php endif; ?><p><?php esc_html_e( 'Create a normal page containing [ccd_article] as a starting point for your theme or page builder.', 'client-content-dashboard' ); ?></p><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="ccd_create_article_template"><?php wp_nonce_field( 'ccd_create_article_template', 'ccd_article_template_nonce' ); ?><?php submit_button( __( 'Create Article Template Page', 'client-content-dashboard' ), 'secondary' ); ?></form><?php
 	}
 }

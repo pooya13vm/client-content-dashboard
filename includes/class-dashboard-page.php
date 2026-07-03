@@ -124,6 +124,7 @@ class CCD_Dashboard_Page {
 		<?php wp_nonce_field( 'ccd_recreate_dashboard_page', 'ccd_dashboard_page_nonce' ); ?>
 		<?php submit_button( __( 'Create/Recreate Dashboard Page', 'client-content-dashboard' ), 'secondary' ); ?>
 		</form>
+		<?php CCD_Article_Display::render_tools_section(); ?>
 		<?php CCD_Updater::render_tools_section(); ?>
 		<?php
 	}
