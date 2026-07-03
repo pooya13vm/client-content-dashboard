@@ -22,7 +22,7 @@ class CCD_Activator {
 				'hide_wp_admin'       => 1,
 				'max_upload_mb'       => 5,
 				'max_gallery_images'  => 8,
-				'article_display_layout' => 'theme',
+				'article_display_layout' => 'clean',
 			) );
 		}
 
