@@ -3,6 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class CCD_Dashboard {
 	private static $login_error = '';
+	private static $form_error = '';
 	private static $editor_instance = 0;
 
 	public static function init() {
@@ -22,6 +23,7 @@ class CCD_Dashboard {
 	public static function assets() {
 		if ( ! is_singular() || ! has_shortcode( (string) get_post_field( 'post_content', get_queried_object_id() ), 'client_content_dashboard' ) ) { return; }
 		wp_enqueue_style( 'ccd-dashboard', CCD_URL . 'assets/css/dashboard.css', array(), CCD_VERSION );
+		wp_enqueue_script( 'ccd-dashboard', CCD_URL . 'assets/js/dashboard.js', array(), CCD_VERSION, true );
 		if ( self::can_access() ) {
 			add_filter( 'wp_default_editor', array( __CLASS__, 'default_editor' ) );
 			wp_enqueue_editor();
@@ -66,6 +68,21 @@ class CCD_Dashboard {
 		$intent = isset( $_POST['ccd_save_intent'] ) ? sanitize_key( wp_unslash( $_POST['ccd_save_intent'] ) ) : '';
 		if ( 'draft' === $intent ) {
 			$data['post_status'] = 'draft';
+		} elseif ( 'preview' === $intent ) {
+			$data['post_status'] = 'publish' === $original_status ? 'publish' : 'draft';
+		} elseif ( 'schedule' === $intent ) {
+			if ( ! self::can_publish() ) { wp_die( esc_html__( 'You are not allowed to schedule content.', 'client-content-dashboard' ), '', array( 'response' => 403 ) ); }
+			$date = isset( $_POST['ccd_schedule_date'] ) ? sanitize_text_field( wp_unslash( $_POST['ccd_schedule_date'] ) ) : '';
+			$time = isset( $_POST['ccd_schedule_time'] ) ? sanitize_text_field( wp_unslash( $_POST['ccd_schedule_time'] ) ) : '';
+			$scheduled = DateTimeImmutable::createFromFormat( '!Y-m-d H:i', $date . ' ' . $time, wp_timezone() );
+			$errors = DateTimeImmutable::getLastErrors();
+			if ( ! $scheduled || ( is_array( $errors ) && ( $errors['warning_count'] || $errors['error_count'] ) ) || $scheduled->getTimestamp() <= time() ) {
+				self::$form_error = __( 'Choose a future date and time using the site timezone.', 'client-content-dashboard' );
+				return;
+			}
+			$data['post_status'] = 'future';
+			$data['post_date'] = $scheduled->format( 'Y-m-d H:i:s' );
+			$data['post_date_gmt'] = $scheduled->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
 		} elseif ( 'publish' === $intent ) {
 			if ( ! self::can_publish() ) { wp_die( esc_html__( 'You are not allowed to publish content.', 'client-content-dashboard' ), '', array( 'response' => 403 ) ); }
 			$data['post_status'] = 'publish';
@@ -82,9 +99,23 @@ class CCD_Dashboard {
 		foreach ( $template['fields'] as $field ) {
 			self::save_field( $post_id, $field, $settings );
 		}
-		$message = 'draft' === $data['post_status'] ? 'draft' : ( 'publish' === $data['post_status'] ? ( 'publish' === $original_status ? 'updated' : 'published' ) : 'updated' );
+		if ( 'preview' === $intent ) {
+			self::render_preview_response( $post_id );
+		}
+		$message = 'future' === $data['post_status'] ? 'scheduled' : ( 'draft' === $data['post_status'] ? 'draft' : ( 'publish' === $data['post_status'] ? ( 'publish' === $original_status ? 'updated' : 'published' ) : 'updated' ) );
 		$url = remove_query_arg( array( 'ccd_edit' ) );
+		if ( 'schedule' === $intent ) { $url = self::view_url( 'dashboard' ); }
 		wp_safe_redirect( add_query_arg( 'ccd_saved', $message, $url ) );
+		exit;
+	}
+
+	private static function render_preview_response( $post_id ) {
+		$preview_url = get_preview_post_link( $post_id );
+		$editor_url = self::view_url( 'add', array( 'ccd_edit' => $post_id ) );
+		if ( ! $preview_url ) { wp_die( esc_html__( 'A preview URL could not be created.', 'client-content-dashboard' ) ); }
+		nocache_headers();
+		header( 'Content-Type: text/html; charset=' . get_bloginfo( 'charset' ) );
+		?><!doctype html><html><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?php esc_html_e( 'Opening preview…', 'client-content-dashboard' ); ?></title></head><body><p><?php esc_html_e( 'Opening article preview…', 'client-content-dashboard' ); ?></p><script>if(window.opener){window.opener.location.href=<?php echo wp_json_encode( $editor_url ); ?>;}window.location.replace(<?php echo wp_json_encode( $preview_url ); ?>);</script><noscript><a href="<?php echo esc_url( $preview_url ); ?>"><?php esc_html_e( 'Open preview', 'client-content-dashboard' ); ?></a></noscript></body></html><?php
 		exit;
 	}
 
@@ -206,7 +237,7 @@ class CCD_Dashboard {
 		ob_start();
 		?><div class="ccd-dashboard"><div class="ccd-portal-shell">
 		<main class="ccd-app-main">
-		<?php if ( isset( $_GET['ccd_saved'] ) ) : $saved = sanitize_key( wp_unslash( $_GET['ccd_saved'] ) ); $messages = array( 'draft' => __( 'Draft saved.', 'client-content-dashboard' ), 'published' => __( 'Article published.', 'client-content-dashboard' ), 'updated' => __( 'Article updated.', 'client-content-dashboard' ) ); ?><div class="ccd-notice"><?php echo esc_html( isset( $messages[ $saved ] ) ? $messages[ $saved ] : __( 'Content saved.', 'client-content-dashboard' ) ); ?></div><?php endif; ?>
+		<?php if ( isset( $_GET['ccd_saved'] ) ) : $saved = sanitize_key( wp_unslash( $_GET['ccd_saved'] ) ); $messages = array( 'draft' => __( 'Draft saved.', 'client-content-dashboard' ), 'published' => __( 'Article published.', 'client-content-dashboard' ), 'updated' => __( 'Article updated.', 'client-content-dashboard' ), 'scheduled' => __( 'Article scheduled.', 'client-content-dashboard' ) ); ?><div class="ccd-notice"><?php echo esc_html( isset( $messages[ $saved ] ) ? $messages[ $saved ] : __( 'Content saved.', 'client-content-dashboard' ) ); ?></div><?php endif; ?>
 		<?php self::render_view( $view, $edit_id, $filter ); ?>
 		</main></div></div><?php
 		return ob_get_clean();
@@ -256,6 +287,7 @@ class CCD_Dashboard {
 		if ( 'add' === $view ) {
 			echo '<a class="ccd-back-link" href="' . esc_url( self::view_url( 'dashboard' ) ) . '">&larr; ' . esc_html__( 'Back to Dashboard', 'client-content-dashboard' ) . '</a>';
 			self::render_header( $edit_id ? __( 'Edit Article', 'client-content-dashboard' ) : __( 'Add Article', 'client-content-dashboard' ), __( 'Add the article details below.', 'client-content-dashboard' ) );
+			if ( self::$form_error ) { echo '<div class="ccd-form-error" role="alert">' . esc_html( self::$form_error ) . '</div>'; }
 			self::render_form( $edit_id );
 		} else {
 			self::render_overview( $filter );
@@ -315,12 +347,15 @@ class CCD_Dashboard {
 		?><form class="ccd-form" method="post" enctype="multipart/form-data">
 		<?php wp_nonce_field( 'ccd_save_content', 'ccd_nonce' ); ?><input type="hidden" name="ccd_action" value="save_content"><input type="hidden" name="ccd_post_id" value="<?php echo esc_attr( $post_id ); ?>">
 		<?php foreach ( $template['fields'] as $field ) { self::render_field( $field, $post, 'article' ); } ?>
-		<div class="ccd-form-actions"><button class="ccd-secondary-action" type="submit" name="ccd_save_intent" value="draft"><?php esc_html_e( 'Save Draft', 'client-content-dashboard' ); ?></button><?php if ( self::can_publish() ) : ?><button class="ccd-submit" type="submit" name="ccd_save_intent" value="publish"><?php echo 'publish' === ( $post ? $post->post_status : '' ) ? esc_html__( 'Update Published Article', 'client-content-dashboard' ) : esc_html__( 'Publish', 'client-content-dashboard' ); ?></button><?php endif; ?></div></form><?php
+		<div class="ccd-form-actions"><button class="ccd-secondary-action" type="submit" name="ccd_save_intent" value="draft"><?php esc_html_e( 'Save Draft', 'client-content-dashboard' ); ?></button><button class="ccd-secondary-action" type="submit" name="ccd_save_intent" value="preview" formtarget="ccd_article_preview"><?php esc_html_e( 'Preview', 'client-content-dashboard' ); ?></button><?php if ( self::can_publish() ) : ?><button class="ccd-secondary-action ccd-schedule-open" type="button"><?php esc_html_e( 'Schedule', 'client-content-dashboard' ); ?></button><button class="ccd-submit" type="submit" name="ccd_save_intent" value="publish"><?php echo 'publish' === ( $post ? $post->post_status : '' ) ? esc_html__( 'Update Published Article', 'client-content-dashboard' ) : esc_html__( 'Publish', 'client-content-dashboard' ); ?></button><?php endif; ?></div>
+		<?php if ( self::can_publish() ) : $schedule_date = isset( $_POST['ccd_schedule_date'] ) ? sanitize_text_field( wp_unslash( $_POST['ccd_schedule_date'] ) ) : ''; $schedule_time = isset( $_POST['ccd_schedule_time'] ) ? sanitize_text_field( wp_unslash( $_POST['ccd_schedule_time'] ) ) : ''; ?><div class="ccd-schedule-modal<?php echo self::$form_error ? ' is-open' : ''; ?>"<?php echo self::$form_error ? '' : ' hidden'; ?>><div class="ccd-schedule-dialog" role="dialog" aria-modal="true" aria-labelledby="ccd-schedule-title"><h2 id="ccd-schedule-title"><?php esc_html_e( 'Schedule Article', 'client-content-dashboard' ); ?></h2><p><?php esc_html_e( 'Choose a publication date and time in the site timezone.', 'client-content-dashboard' ); ?></p><?php if ( self::$form_error ) : ?><div class="ccd-modal-error" role="alert"><?php echo esc_html( self::$form_error ); ?></div><?php endif; ?><label><?php esc_html_e( 'Date', 'client-content-dashboard' ); ?><input type="date" name="ccd_schedule_date" value="<?php echo esc_attr( $schedule_date ); ?>"></label><label><?php esc_html_e( 'Time', 'client-content-dashboard' ); ?><input type="time" name="ccd_schedule_time" value="<?php echo esc_attr( $schedule_time ); ?>"></label><div class="ccd-schedule-actions"><button class="ccd-secondary-action ccd-schedule-cancel" type="button"><?php esc_html_e( 'Cancel', 'client-content-dashboard' ); ?></button><button class="ccd-submit" type="submit" name="ccd_save_intent" value="schedule"><?php esc_html_e( 'Schedule Article', 'client-content-dashboard' ); ?></button></div></div></div><?php endif; ?></form><?php
 	}
 
 	private static function render_field( $field, $post, $template_key ) {
 		$value = '';
-		if ( $post && 'post_title' === $field['map'] ) { $value = $post->post_title; }
+		$is_submission = isset( $_POST['ccd_action'] ) && 'save_content' === $_POST['ccd_action'];
+		if ( $is_submission && isset( $_POST[ $field['key'] ] ) ) { $value = wp_unslash( $_POST[ $field['key'] ] ); }
+		elseif ( $post && 'post_title' === $field['map'] ) { $value = $post->post_title; }
 		elseif ( $post && 'post_content' === $field['map'] ) { $value = $post->post_content; }
 		elseif ( $post && 'meta' === $field['map'] && 'gallery' !== $field['type'] ) { $value = get_post_meta( $post->ID, $field['meta_key'], true ); }
 		$required = ! empty( $field['required'] ) ? ' required' : '';
@@ -348,7 +383,7 @@ class CCD_Dashboard {
 		}
 		?><label><?php echo esc_html( $field['label'] ); ?><?php
 		if ( 'textarea' === $field['type'] ) : ?><textarea name="<?php echo esc_attr( $field['key'] ); ?>" rows="6"<?php echo esc_attr( $required ); ?>><?php echo esc_textarea( $value ); ?></textarea><?php
-		elseif ( 'taxonomy' === $field['type'] ) : $terms = get_terms( array( 'taxonomy' => $field['taxonomy'], 'hide_empty' => false ) ); $current = $post ? wp_get_object_terms( $post->ID, $field['taxonomy'], array( 'fields' => 'ids' ) ) : array(); ?><select name="<?php echo esc_attr( $field['key'] ); ?>"><option value="0"><?php esc_html_e( 'None', 'client-content-dashboard' ); ?></option><?php if ( ! is_wp_error( $terms ) ) { foreach ( $terms as $term ) { ?><option value="<?php echo esc_attr( $term->term_id ); ?>" <?php selected( in_array( $term->term_id, $current, true ) ); ?>><?php echo esc_html( $term->name ); ?></option><?php } } ?></select><?php
+		elseif ( 'taxonomy' === $field['type'] ) : $terms = get_terms( array( 'taxonomy' => $field['taxonomy'], 'hide_empty' => false ) ); $current = $is_submission && isset( $_POST[ $field['key'] ] ) ? array( absint( $_POST[ $field['key'] ] ) ) : ( $post ? wp_get_object_terms( $post->ID, $field['taxonomy'], array( 'fields' => 'ids' ) ) : array() ); ?><select name="<?php echo esc_attr( $field['key'] ); ?>"><option value="0"><?php esc_html_e( 'None', 'client-content-dashboard' ); ?></option><?php if ( ! is_wp_error( $terms ) ) { foreach ( $terms as $term ) { ?><option value="<?php echo esc_attr( $term->term_id ); ?>" <?php selected( in_array( $term->term_id, $current, true ) ); ?>><?php echo esc_html( $term->name ); ?></option><?php } } ?></select><?php
 		elseif ( in_array( $field['type'], array( 'image', 'gallery' ), true ) ) : ?><input type="file" name="<?php echo esc_attr( $field['key'] ); ?><?php echo 'gallery' === $field['type'] ? '[]' : ''; ?>" accept="image/*" <?php echo 'gallery' === $field['type'] ? 'multiple' : ''; ?>><?php
 		else : ?><input type="<?php echo esc_attr( in_array( $field['type'], array( 'url', 'date' ), true ) ? $field['type'] : 'text' ); ?>" name="<?php echo esc_attr( $field['key'] ); ?>" value="<?php echo esc_attr( $value ); ?>"<?php echo esc_attr( $required ); ?>><?php endif; ?></label><?php
 	}
