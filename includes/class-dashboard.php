@@ -98,7 +98,7 @@ class CCD_Dashboard {
 		}
 		$result = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'publish' ), true );
 		if ( is_wp_error( $result ) ) { wp_die( esc_html( $result->get_error_message() ) ); }
-		wp_safe_redirect( add_query_arg( array( 'ccd_view' => 'articles', 'ccd_saved' => 'published' ), get_permalink( get_queried_object_id() ) ) );
+		wp_safe_redirect( add_query_arg( array( 'ccd_view' => 'dashboard', 'ccd_saved' => 'published' ), get_permalink( get_queried_object_id() ) ) );
 		exit;
 	}
 
@@ -197,17 +197,17 @@ class CCD_Dashboard {
 	public static function shortcode() {
 		if ( ! is_user_logged_in() ) { return self::render_login_form(); }
 		if ( ! self::can_access() ) { return '<p class="ccd-permission-error">' . esc_html__( 'You do not have permission to access this dashboard.', 'client-content-dashboard' ) . '</p>'; }
-		$view = isset( $_GET['ccd_view'] ) ? sanitize_key( wp_unslash( $_GET['ccd_view'] ) ) : 'dashboard';
-		if ( ! in_array( $view, array( 'dashboard', 'articles', 'add', 'drafts', 'scheduled', 'media', 'settings' ), true ) ) { $view = 'dashboard'; }
+		$view = isset( $_GET['ccd_view'] ) && 'add' === sanitize_key( wp_unslash( $_GET['ccd_view'] ) ) ? 'add' : 'dashboard';
+		$filter = isset( $_GET['ccd_filter'] ) ? sanitize_key( wp_unslash( $_GET['ccd_filter'] ) ) : 'all';
+		if ( ! in_array( $filter, array( 'all', 'published', 'drafts', 'scheduled' ), true ) ) { $filter = 'all'; }
 		$edit_id = isset( $_GET['ccd_edit'] ) ? absint( $_GET['ccd_edit'] ) : 0;
 		if ( $edit_id && ! self::can_edit( $edit_id ) ) { $edit_id = 0; }
 		if ( $edit_id ) { $view = 'add'; }
 		ob_start();
-		?><div class="ccd-dashboard"><div class="ccd-app-shell">
-		<?php self::render_sidebar( $view ); ?>
+		?><div class="ccd-dashboard"><div class="ccd-portal-shell">
 		<main class="ccd-app-main">
 		<?php if ( isset( $_GET['ccd_saved'] ) ) : $saved = sanitize_key( wp_unslash( $_GET['ccd_saved'] ) ); $messages = array( 'draft' => __( 'Draft saved.', 'client-content-dashboard' ), 'published' => __( 'Article published.', 'client-content-dashboard' ), 'updated' => __( 'Article updated.', 'client-content-dashboard' ) ); ?><div class="ccd-notice"><?php echo esc_html( isset( $messages[ $saved ] ) ? $messages[ $saved ] : __( 'Content saved.', 'client-content-dashboard' ) ); ?></div><?php endif; ?>
-		<?php self::render_view( $view, $edit_id ); ?>
+		<?php self::render_view( $view, $edit_id, $filter ); ?>
 		</main></div></div><?php
 		return ob_get_clean();
 	}
@@ -250,41 +250,38 @@ class CCD_Dashboard {
 		?><header class="ccd-view-header"><div><h1><?php echo esc_html( $title ); ?></h1><p><?php echo esc_html( $subtitle ); ?></p></div><?php if ( $action ) { echo $action; } ?></header><?php
 	}
 
-	private static function render_view( $view, $edit_id ) {
+	private static function render_view( $view, $edit_id, $filter ) {
 		$add_button = '<a class="ccd-primary-link" href="' . esc_url( self::view_url( 'add' ) ) . '">' . esc_html__( 'Add New Article', 'client-content-dashboard' ) . '</a>';
-		if ( 'dashboard' === $view ) {
-			self::render_header( __( 'Content Dashboard', 'client-content-dashboard' ), __( 'Create and manage content for your website.', 'client-content-dashboard' ), $add_button );
-			self::render_overview();
-		} elseif ( 'articles' === $view ) {
-			self::render_header( __( 'Articles', 'client-content-dashboard' ), __( 'Review and update all content you have created.', 'client-content-dashboard' ), $add_button );
-			self::render_list( array( 'draft', 'pending', 'publish', 'private', 'future' ) );
-		} elseif ( 'add' === $view ) {
+		self::render_portal_header( $view, $add_button );
+		if ( 'add' === $view ) {
+			echo '<a class="ccd-back-link" href="' . esc_url( self::view_url( 'dashboard' ) ) . '">&larr; ' . esc_html__( 'Back to Dashboard', 'client-content-dashboard' ) . '</a>';
 			self::render_header( $edit_id ? __( 'Edit Article', 'client-content-dashboard' ) : __( 'Add Article', 'client-content-dashboard' ), __( 'Add the article details below.', 'client-content-dashboard' ) );
 			self::render_form( $edit_id );
-		} elseif ( 'drafts' === $view ) {
-			self::render_header( __( 'Drafts', 'client-content-dashboard' ), __( 'Continue working on articles that are not yet published.', 'client-content-dashboard' ) );
-			self::render_list( array( 'draft' ) );
-		} elseif ( 'scheduled' === $view ) {
-			self::render_header( __( 'Scheduled', 'client-content-dashboard' ), __( 'Articles scheduled for future publication.', 'client-content-dashboard' ) );
-			self::render_list( array( 'future' ), __( 'No scheduled articles yet.', 'client-content-dashboard' ) );
-		} elseif ( 'media' === $view ) {
-			self::render_header( __( 'Media', 'client-content-dashboard' ), __( 'A dedicated media library view can be added here later.', 'client-content-dashboard' ) );
-			self::render_placeholder( __( 'Media management is coming soon.', 'client-content-dashboard' ) );
 		} else {
-			self::render_header( __( 'Settings', 'client-content-dashboard' ), __( 'Personal dashboard preferences will appear here.', 'client-content-dashboard' ) );
-			self::render_placeholder( __( 'No client settings are available yet.', 'client-content-dashboard' ) );
+			self::render_overview( $filter );
 		}
 	}
 
-	private static function render_overview() {
+	private static function render_portal_header( $view, $add_button ) {
+		$user = wp_get_current_user();
+		$name = $user->first_name ? $user->first_name : $user->user_login;
+		$logout_url = wp_logout_url( self::view_url( 'dashboard' ) );
+		?><header class="ccd-dashboard-top"><div><h1><?php esc_html_e( 'Content Dashboard', 'client-content-dashboard' ); ?></h1><p><?php esc_html_e( 'Create and manage articles for your website.', 'client-content-dashboard' ); ?></p></div><div class="ccd-dashboard-top__actions"><?php if ( 'dashboard' === $view ) { echo $add_button; } ?><div class="ccd-user-account"><span><?php echo esc_html( sprintf( __( 'Hi, %s', 'client-content-dashboard' ), $name ) ); ?></span><a href="<?php echo esc_url( $logout_url ); ?>"><?php esc_html_e( 'Logout', 'client-content-dashboard' ); ?></a></div></div></header><?php
+	}
+
+	private static function render_overview( $filter ) {
 		$posts = get_posts( array( 'author' => get_current_user_id(), 'post_type' => 'post', 'post_status' => array( 'draft', 'pending', 'publish', 'private', 'future' ), 'posts_per_page' => -1, 'fields' => 'ids', 'meta_key' => '_ccd_content_template' ) );
 		$counts = array( 'total' => count( $posts ), 'draft' => 0, 'publish' => 0, 'future' => 0 );
 		foreach ( $posts as $post_id ) { $status = get_post_status( $post_id ); if ( isset( $counts[ $status ] ) ) { $counts[ $status ]++; } }
 		$cards = array( __( 'Total Articles', 'client-content-dashboard' ) => $counts['total'], __( 'Drafts', 'client-content-dashboard' ) => $counts['draft'], __( 'Published', 'client-content-dashboard' ) => $counts['publish'], __( 'Scheduled', 'client-content-dashboard' ) => $counts['future'] );
 		echo '<div class="ccd-overview-grid">'; foreach ( $cards as $label => $count ) { echo '<div class="ccd-stat-card"><span>' . esc_html( $label ) . '</span><strong>' . esc_html( (string) $count ) . '</strong></div>'; } echo '</div>';
 		if ( $counts['total'] > 0 ) {
-			echo '<section class="ccd-dashboard-articles"><div class="ccd-section-heading"><h2>' . esc_html__( 'Your Articles', 'client-content-dashboard' ) . '</h2><p>' . esc_html__( 'Review and manage your existing articles.', 'client-content-dashboard' ) . '</p></div>';
-			self::render_list( array( 'draft', 'pending', 'publish', 'private', 'future' ) );
+			$filters = array( 'all' => __( 'All', 'client-content-dashboard' ), 'published' => __( 'Published', 'client-content-dashboard' ), 'drafts' => __( 'Drafts', 'client-content-dashboard' ), 'scheduled' => __( 'Scheduled', 'client-content-dashboard' ) );
+			$status_map = array( 'all' => array( 'draft', 'pending', 'publish', 'private', 'future' ), 'published' => array( 'publish' ), 'drafts' => array( 'draft' ), 'scheduled' => array( 'future' ) );
+			echo '<section class="ccd-dashboard-articles"><div class="ccd-section-heading"><h2>' . esc_html__( 'Your Articles', 'client-content-dashboard' ) . '</h2><p>' . esc_html__( 'Review and manage your existing articles.', 'client-content-dashboard' ) . '</p></div><nav class="ccd-article-filters" aria-label="' . esc_attr__( 'Filter articles', 'client-content-dashboard' ) . '">';
+			foreach ( $filters as $key => $label ) { echo '<a class="' . ( $filter === $key ? 'is-active' : '' ) . '" href="' . esc_url( add_query_arg( 'ccd_filter', $key, self::view_url( 'dashboard' ) ) ) . '"' . ( $filter === $key ? ' aria-current="page"' : '' ) . '>' . esc_html( $label ) . '</a>'; }
+			echo '</nav>';
+			self::render_list( $status_map[ $filter ], __( 'No articles found for this filter.', 'client-content-dashboard' ) );
 			echo '</section>';
 		} else {
 			echo '<section class="ccd-dashboard-empty"><h2>' . esc_html__( 'No articles yet.', 'client-content-dashboard' ) . '</h2><p>' . esc_html__( 'Create your first article to get started.', 'client-content-dashboard' ) . '</p><a class="ccd-primary-link" href="' . esc_url( self::view_url( 'add' ) ) . '">' . esc_html__( 'Add New Article', 'client-content-dashboard' ) . '</a></section>';
