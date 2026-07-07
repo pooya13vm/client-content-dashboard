@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: Client Content Dashboard
- * Description: A simplified frontend dashboard for clients to create and manage structured content.
- * Version: 0.4.1
+ * Plugin Name: Client Article Dashboard
+ * Description: A simple frontend dashboard for client users to create, preview, schedule, publish, and manage WordPress articles.
+ * Version: 0.4.2
  * Author: Pooya Vaghef
  * Author URI: https://www.pooyavaghef.com/
  * Plugin URI: https://www.pooyavaghef.com/
