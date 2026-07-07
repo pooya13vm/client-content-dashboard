@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Client Content Dashboard
  * Description: A simplified frontend dashboard for clients to create and manage structured content.
- * Version: 0.4.0
+ * Version: 0.4.1
  * Author: Pooya Vaghef
  * Author URI: https://www.pooyavaghef.com/
  * Plugin URI: https://www.pooyavaghef.com/

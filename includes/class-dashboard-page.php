@@ -165,17 +165,22 @@ class CCD_Dashboard_Page {
 		return array( 'state' => 'exists', 'page' => $page );
 	}
 
-	public static function render_settings_rows() {
+	public static function render_action_row() {
 		if ( ! current_user_can( 'manage_options' ) ) { return; }
-		$status = self::status();
 		$result = isset( $_GET['ccd_page_result'] ) ? sanitize_key( wp_unslash( $_GET['ccd_page_result'] ) ) : '';
 		$action_url = wp_nonce_url( add_query_arg( 'action', 'ccd_recreate_dashboard_page', admin_url( 'admin-post.php' ) ), 'ccd_recreate_dashboard_page', 'ccd_dashboard_page_nonce' );
 		?>
 		<?php if ( 'success' === $result ) : ?><tr><th></th><td><div class="notice notice-success inline"><p><?php esc_html_e( 'Dashboard page created or repaired.', 'client-content-dashboard' ); ?></p></div></td></tr><?php elseif ( 'failed' === $result ) : ?><tr><th></th><td><div class="notice notice-error inline"><p><?php esc_html_e( 'Dashboard page could not be created.', 'client-content-dashboard' ); ?></p></div></td></tr><?php endif; ?>
+		<tr><th><?php esc_html_e( 'Dashboard Page Action', 'client-content-dashboard' ); ?></th><td><p><a class="button button-secondary" href="<?php echo esc_url( $action_url ); ?>"><?php esc_html_e( 'Create/Recreate Dashboard Page', 'client-content-dashboard' ); ?></a></p><p class="description"><?php esc_html_e( 'Click this button to create the frontend dashboard page automatically. You can find the created page in Pages, and it will contain the dashboard shortcode.', 'client-content-dashboard' ); ?><br><?php esc_html_e( 'If Elementor is active, the dashboard page is prepared for Elementor Canvas automatically.', 'client-content-dashboard' ); ?></p></td></tr><?php
+	}
+
+	public static function render_status_rows() {
+		if ( ! current_user_can( 'manage_options' ) ) { return; }
+		$status = self::status();
+		?>
 		<tr><th><?php esc_html_e( 'Current status', 'client-content-dashboard' ); ?></th><td><?php echo esc_html( $status['state'] ); ?></td></tr>
 		<tr><th><?php esc_html_e( 'Page title', 'client-content-dashboard' ); ?></th><td><?php echo $status['page'] ? esc_html( get_the_title( $status['page'] ) ) : '&mdash;'; ?></td></tr>
 		<tr><th><?php esc_html_e( 'Page URL', 'client-content-dashboard' ); ?></th><td><?php if ( $status['page'] && 'exists' === $status['state'] ) : $url = get_permalink( $status['page'] ); ?><a href="<?php echo esc_url( $url ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $url ); ?></a><?php else : ?>&mdash;<?php endif; ?></td></tr>
-		<tr><th><?php esc_html_e( 'Page template', 'client-content-dashboard' ); ?></th><td><?php echo esc_html( self::template_label( $status['page'] ) ); ?></td></tr>
-		<tr><th><?php esc_html_e( 'Dashboard Page Action', 'client-content-dashboard' ); ?></th><td><p class="description"><?php esc_html_e( 'For the cleanest portal layout, Elementor Canvas is recommended when available.', 'client-content-dashboard' ); ?><br><?php esc_html_e( 'If Elementor is active, the dashboard page is prepared for Elementor Canvas automatically.', 'client-content-dashboard' ); ?></p><p><a class="button button-secondary" href="<?php echo esc_url( $action_url ); ?>"><?php esc_html_e( 'Create/Recreate Dashboard Page', 'client-content-dashboard' ); ?></a></p></td></tr><?php
+		<tr><th><?php esc_html_e( 'Page template', 'client-content-dashboard' ); ?></th><td><?php echo esc_html( self::template_label( $status['page'] ) ); ?><p class="description"><?php esc_html_e( 'For the cleanest portal layout, Elementor Canvas is recommended when available.', 'client-content-dashboard' ); ?></p></td></tr><?php
 	}
 }
