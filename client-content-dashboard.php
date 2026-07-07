@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Client Content Dashboard
  * Description: A simplified frontend dashboard for clients to create and manage structured content.
- * Version: 0.3.7
- * Author: Client Content Dashboard
+ * Version: 0.3.8
+ * Author: Pooya Vaghef (www.pooyavaghef.com)
  * Text Domain: client-content-dashboard
  * Requires at least: 6.2
  * Requires PHP: 7.4

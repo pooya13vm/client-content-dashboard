@@ -106,9 +106,4 @@ class CCD_Article_Display {
 		exit;
 	}
 
-	public static function render_tools_section() {
-		if ( ! current_user_can( 'manage_options' ) ) { return; }
-		$result = isset( $_GET['ccd_article_template_result'] ) ? sanitize_key( wp_unslash( $_GET['ccd_article_template_result'] ) ) : '';
-		?><hr><h2><?php esc_html_e( 'Article Template Page', 'client-content-dashboard' ); ?></h2><?php if ( 'success' === $result ) : ?><div class="notice notice-success inline"><p><?php esc_html_e( 'Article Template page created and selected.', 'client-content-dashboard' ); ?></p></div><?php elseif ( 'failed' === $result ) : ?><div class="notice notice-error inline"><p><?php esc_html_e( 'Article Template page could not be created.', 'client-content-dashboard' ); ?></p></div><?php endif; ?><p><?php esc_html_e( 'Create a normal page containing [ccd_article] as a starting point for your theme or page builder.', 'client-content-dashboard' ); ?></p><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="ccd_create_article_template"><?php wp_nonce_field( 'ccd_create_article_template', 'ccd_article_template_nonce' ); ?><?php submit_button( __( 'Create Article Template Page', 'client-content-dashboard' ), 'secondary' ); ?></form><?php
-	}
 }

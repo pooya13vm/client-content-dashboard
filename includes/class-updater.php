@@ -67,26 +67,4 @@ class CCD_Updater {
 		exit;
 	}
 
-	public static function render_tools_section() {
-		if ( ! current_user_can( 'manage_options' ) ) { return; }
-		$result = isset( $_GET['ccd_updater_result'] ) ? sanitize_key( wp_unslash( $_GET['ccd_updater_result'] ) ) : '';
-		$last_check = absint( get_site_option( 'ccd_puc_last_manual_check', 0 ) );
-		if ( self::$library_active && self::$checker ) {
-			$last_check = absint( self::$checker->getUpdateState()->getLastCheck() );
-		}
-		?>
-		<hr><h2><?php esc_html_e( 'Updater Status', 'client-content-dashboard' ); ?></h2>
-		<?php if ( 'success' === $result ) : ?><div class="notice notice-success inline"><p><?php esc_html_e( 'Plugin Update Checker cache cleared and GitHub checked.', 'client-content-dashboard' ); ?></p></div><?php elseif ( 'failed' === $result ) : ?><div class="notice notice-error inline"><p><?php esc_html_e( 'Plugin Update Checker is not available, so the update check could not run.', 'client-content-dashboard' ); ?></p></div><?php endif; ?>
-		<table class="widefat striped" style="max-width:760px"><tbody>
-		<tr><th><?php esc_html_e( 'Installed plugin version', 'client-content-dashboard' ); ?></th><td><?php echo esc_html( CCD_VERSION ); ?></td></tr>
-		<tr><th><?php esc_html_e( 'GitHub repository', 'client-content-dashboard' ); ?></th><td><?php if ( self::$repository ) : ?><a href="<?php echo esc_url( self::$repository ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( self::$repository ); ?></a><?php else : ?><?php esc_html_e( 'Not configured', 'client-content-dashboard' ); ?><?php endif; ?></td></tr>
-		<tr><th><?php esc_html_e( 'Updater library active', 'client-content-dashboard' ); ?></th><td><?php echo self::$library_active ? esc_html__( 'Yes', 'client-content-dashboard' ) : esc_html__( 'No', 'client-content-dashboard' ); ?></td></tr>
-		<tr><th><?php esc_html_e( 'Last cache clear/check', 'client-content-dashboard' ); ?></th><td><?php echo $last_check ? esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $last_check ) ) : esc_html__( 'Not available', 'client-content-dashboard' ); ?></td></tr>
-		</tbody></table>
-		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-		<input type="hidden" name="action" value="ccd_refresh_updates">
-		<?php wp_nonce_field( 'ccd_refresh_updates', 'ccd_update_nonce' ); ?>
-		<?php submit_button( __( 'Clear Update Cache / Check Now', 'client-content-dashboard' ), 'secondary' ); ?>
-		</form><?php
-	}
 }

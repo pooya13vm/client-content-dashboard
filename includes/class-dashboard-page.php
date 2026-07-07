@@ -92,7 +92,7 @@ class CCD_Dashboard_Page {
 		}
 		check_admin_referer( 'ccd_recreate_dashboard_page', 'ccd_dashboard_page_nonce' );
 		$result = self::create_or_repair( true ) ? 'success' : 'failed';
-		wp_safe_redirect( add_query_arg( array( 'page' => 'client-content-dashboard', 'tab' => 'tools', 'ccd_page_result' => $result ), admin_url( 'admin.php' ) ) );
+		wp_safe_redirect( add_query_arg( array( 'page' => 'client-content-dashboard', 'tab' => 'settings', 'ccd_page_result' => $result ), admin_url( 'admin.php' ) ) );
 		exit;
 	}
 
@@ -101,31 +101,21 @@ class CCD_Dashboard_Page {
 		$page_id = empty( $settings['dashboard_page_id'] ) ? 0 : absint( $settings['dashboard_page_id'] );
 		$page = $page_id ? get_post( $page_id ) : null;
 		if ( ! $page ) { return array( 'state' => 'missing', 'page' => null ); }
-		if ( 'trash' === $page->post_status ) { return array( 'state' => 'trashed', 'page' => $page ); }
+		if ( 'trash' === $page->post_status ) { return array( 'state' => 'missing', 'page' => $page ); }
 		return array( 'state' => 'exists', 'page' => $page );
 	}
 
-	public static function render_tools() {
+	public static function render_settings_rows() {
 		if ( ! current_user_can( 'manage_options' ) ) { return; }
 		$status = self::status();
 		$result = isset( $_GET['ccd_page_result'] ) ? sanitize_key( wp_unslash( $_GET['ccd_page_result'] ) ) : '';
+		$action_url = wp_nonce_url( add_query_arg( 'action', 'ccd_recreate_dashboard_page', admin_url( 'admin-post.php' ) ), 'ccd_recreate_dashboard_page', 'ccd_dashboard_page_nonce' );
 		?>
-		<h2><?php esc_html_e( 'Dashboard Page Status', 'client-content-dashboard' ); ?></h2>
-		<?php if ( 'success' === $result ) : ?><div class="notice notice-success inline"><p><?php esc_html_e( 'Dashboard page created or repaired.', 'client-content-dashboard' ); ?></p></div><?php elseif ( 'failed' === $result ) : ?><div class="notice notice-error inline"><p><?php esc_html_e( 'Dashboard page could not be created.', 'client-content-dashboard' ); ?></p></div><?php endif; ?>
-		<table class="widefat striped" style="max-width:760px"><tbody>
+		<?php if ( 'success' === $result ) : ?><tr><th></th><td><div class="notice notice-success inline"><p><?php esc_html_e( 'Dashboard page created or repaired.', 'client-content-dashboard' ); ?></p></div></td></tr><?php elseif ( 'failed' === $result ) : ?><tr><th></th><td><div class="notice notice-error inline"><p><?php esc_html_e( 'Dashboard page could not be created.', 'client-content-dashboard' ); ?></p></div></td></tr><?php endif; ?>
 		<tr><th><?php esc_html_e( 'Current status', 'client-content-dashboard' ); ?></th><td><?php echo esc_html( $status['state'] ); ?></td></tr>
 		<tr><th><?php esc_html_e( 'Page title', 'client-content-dashboard' ); ?></th><td><?php echo $status['page'] ? esc_html( get_the_title( $status['page'] ) ) : '&mdash;'; ?></td></tr>
-		<tr><th><?php esc_html_e( 'Page URL', 'client-content-dashboard' ); ?></th><td><?php if ( $status['page'] && 'trashed' !== $status['state'] ) : $url = get_permalink( $status['page'] ); ?><a href="<?php echo esc_url( $url ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $url ); ?></a><?php else : ?>&mdash;<?php endif; ?></td></tr>
+		<tr><th><?php esc_html_e( 'Page URL', 'client-content-dashboard' ); ?></th><td><?php if ( $status['page'] && 'exists' === $status['state'] ) : $url = get_permalink( $status['page'] ); ?><a href="<?php echo esc_url( $url ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $url ); ?></a><?php else : ?>&mdash;<?php endif; ?></td></tr>
 		<tr><th><?php esc_html_e( 'Page template', 'client-content-dashboard' ); ?></th><td><?php echo esc_html( self::template_label( $status['page'] ) ); ?></td></tr>
-		</tbody></table>
-		<p class="description"><?php esc_html_e( 'For the cleanest portal layout, Elementor Canvas is recommended when available.', 'client-content-dashboard' ); ?></p>
-		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-		<input type="hidden" name="action" value="ccd_recreate_dashboard_page">
-		<?php wp_nonce_field( 'ccd_recreate_dashboard_page', 'ccd_dashboard_page_nonce' ); ?>
-		<?php submit_button( __( 'Create/Recreate Dashboard Page', 'client-content-dashboard' ), 'secondary' ); ?>
-		</form>
-		<?php CCD_Article_Display::render_tools_section(); ?>
-		<?php CCD_Updater::render_tools_section(); ?>
-		<?php
+		<tr><th><?php esc_html_e( 'Dashboard Page Action', 'client-content-dashboard' ); ?></th><td><p class="description"><?php esc_html_e( 'For the cleanest portal layout, Elementor Canvas is recommended when available.', 'client-content-dashboard' ); ?></p><p><a class="button button-secondary" href="<?php echo esc_url( $action_url ); ?>"><?php esc_html_e( 'Create/Recreate Dashboard Page', 'client-content-dashboard' ); ?></a></p></td></tr><?php
 	}
 }
