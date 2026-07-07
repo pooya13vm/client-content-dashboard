@@ -221,7 +221,6 @@ class CCD_Dashboard {
 		$paths = array(
 			'dashboard' => '<path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/>',
 			'articles'  => '<path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm2 5h10M7 12h10M7 16h7"/>',
-			'add'       => '<path d="M12 5v14M5 12h14"/>',
 			'drafts'    => '<path d="M4 20h4l11-11-4-4L4 16v4Zm9-13 4 4"/>',
 			'scheduled' => '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
 			'media'     => '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-5-5L5 20"/>',
@@ -231,10 +230,10 @@ class CCD_Dashboard {
 	}
 
 	private static function render_sidebar( $active ) {
+		if ( 'add' === $active ) { $active = 'articles'; }
 		$items = array(
 			'dashboard' => __( 'Dashboard', 'client-content-dashboard' ),
 			'articles'  => __( 'Articles', 'client-content-dashboard' ),
-			'add'       => __( 'Add Article', 'client-content-dashboard' ),
 			'drafts'    => __( 'Drafts', 'client-content-dashboard' ),
 			'scheduled' => __( 'Scheduled', 'client-content-dashboard' ),
 			'media'     => __( 'Media', 'client-content-dashboard' ),
@@ -263,7 +262,7 @@ class CCD_Dashboard {
 			self::render_header( $edit_id ? __( 'Edit Article', 'client-content-dashboard' ) : __( 'Add Article', 'client-content-dashboard' ), __( 'Add the article details below.', 'client-content-dashboard' ) );
 			self::render_form( $edit_id );
 		} elseif ( 'drafts' === $view ) {
-			self::render_header( __( 'Drafts', 'client-content-dashboard' ), __( 'Continue working on articles that are not yet published.', 'client-content-dashboard' ), $add_button );
+			self::render_header( __( 'Drafts', 'client-content-dashboard' ), __( 'Continue working on articles that are not yet published.', 'client-content-dashboard' ) );
 			self::render_list( array( 'draft' ) );
 		} elseif ( 'scheduled' === $view ) {
 			self::render_header( __( 'Scheduled', 'client-content-dashboard' ), __( 'Articles scheduled for future publication.', 'client-content-dashboard' ) );
@@ -283,7 +282,13 @@ class CCD_Dashboard {
 		foreach ( $posts as $post_id ) { $status = get_post_status( $post_id ); if ( isset( $counts[ $status ] ) ) { $counts[ $status ]++; } }
 		$cards = array( __( 'Total Articles', 'client-content-dashboard' ) => $counts['total'], __( 'Drafts', 'client-content-dashboard' ) => $counts['draft'], __( 'Published', 'client-content-dashboard' ) => $counts['publish'], __( 'Scheduled', 'client-content-dashboard' ) => $counts['future'] );
 		echo '<div class="ccd-overview-grid">'; foreach ( $cards as $label => $count ) { echo '<div class="ccd-stat-card"><span>' . esc_html( $label ) . '</span><strong>' . esc_html( (string) $count ) . '</strong></div>'; } echo '</div>';
-		echo '<section class="ccd-welcome-card"><h2>' . esc_html__( 'Start creating content', 'client-content-dashboard' ) . '</h2><p>' . esc_html__( 'Create a new article or open the Articles section to manage existing work.', 'client-content-dashboard' ) . '</p><a class="ccd-primary-link" href="' . esc_url( self::view_url( 'add' ) ) . '">' . esc_html__( 'Add New Article', 'client-content-dashboard' ) . '</a></section>';
+		if ( $counts['total'] > 0 ) {
+			echo '<section class="ccd-dashboard-articles"><div class="ccd-section-heading"><h2>' . esc_html__( 'Your Articles', 'client-content-dashboard' ) . '</h2><p>' . esc_html__( 'Review and manage your existing articles.', 'client-content-dashboard' ) . '</p></div>';
+			self::render_list( array( 'draft', 'pending', 'publish', 'private', 'future' ) );
+			echo '</section>';
+		} else {
+			echo '<section class="ccd-dashboard-empty"><h2>' . esc_html__( 'No articles yet.', 'client-content-dashboard' ) . '</h2><p>' . esc_html__( 'Create your first article to get started.', 'client-content-dashboard' ) . '</p><a class="ccd-primary-link" href="' . esc_url( self::view_url( 'add' ) ) . '">' . esc_html__( 'Add New Article', 'client-content-dashboard' ) . '</a></section>';
+		}
 	}
 
 	private static function render_placeholder( $message ) {
