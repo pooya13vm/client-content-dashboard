@@ -66,6 +66,7 @@ class CCD_Dashboard {
 		$settings = get_option( 'ccd_settings', array() );
 		$original_status = $post_id ? get_post_status( $post_id ) : '';
 		$intent = isset( $_POST['ccd_save_intent'] ) ? sanitize_key( wp_unslash( $_POST['ccd_save_intent'] ) ) : '';
+		if ( ! in_array( $intent, array( 'draft', 'preview', 'schedule', 'publish' ), true ) ) { $intent = 'draft'; }
 		if ( 'draft' === $intent ) {
 			$data['post_status'] = 'draft';
 		} elseif ( 'preview' === $intent ) {
@@ -86,9 +87,6 @@ class CCD_Dashboard {
 		} elseif ( 'publish' === $intent ) {
 			if ( ! self::can_publish() ) { wp_die( esc_html__( 'You are not allowed to publish content.', 'client-content-dashboard' ), '', array( 'response' => 403 ) ); }
 			$data['post_status'] = 'publish';
-		} else {
-			// Preserve legacy/default behavior when a submission has no explicit action.
-			$data['post_status'] = $post_id ? $original_status : ( isset( $settings['default_post_status'] ) && 'pending' === $settings['default_post_status'] ? 'pending' : 'draft' );
 		}
 		$result = $post_id ? wp_update_post( array_merge( $data, array( 'ID' => $post_id ) ), true ) : wp_insert_post( $data, true );
 		if ( is_wp_error( $result ) ) { wp_die( esc_html( $result->get_error_message() ) ); }

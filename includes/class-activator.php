@@ -18,8 +18,6 @@ class CCD_Activator {
 		if ( false === get_option( 'ccd_settings' ) ) {
 			add_option( 'ccd_settings', array(
 				'dashboard_page_id'   => 0,
-				'default_post_status' => 'draft',
-				'hide_wp_admin'       => 1,
 				'max_upload_mb'       => 5,
 				'max_gallery_images'  => 8,
 				'article_display_layout' => 'clean',
